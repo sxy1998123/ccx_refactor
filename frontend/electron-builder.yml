@@ -1,0 +1,13 @@
+appId: com.ccx.analysis
+productName: CCX Analysis
+directories:
+  output: dist
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: ../backend/dist/backend
+    to: backend
+asar: true
+win:
+  icon: resources/icon.ico

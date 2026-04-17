@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import analysisPreview from "./assets/mock/analysis-preview.jpeg";
-import riskPreview from "./assets/mock/risk-preview.jpeg";
-import { getAppInfo, type AppInfo } from "./services/api";
+import towerStressPreview from "./assets/mock/tower-stress-cloud.jpeg";
+import PointCloudViewer from "./components/PointCloudViewer.vue";
+import { getAppInfo, submitDemoAnalysisTask, type AppInfo } from "./services/api";
 
 type PageKey = "input" | "analysis" | "database" | "risk";
 type UploadKey = "images" | "towerSd" | "groundSd" | "pointCloud";
@@ -12,8 +12,12 @@ const backendStatus = ref("连接中");
 const appInfo = ref<AppInfo | null>(null);
 const activePage = ref<PageKey>("input");
 const imagePreviewUrl = ref("");
+const routeId = ref("");
 const hasAnalysisResult = ref(false);
 const hasRiskReport = ref(false);
+const isSubmittingAnalysis = ref(false);
+const analysisSubmitMessage = ref("");
+const analysisSubmitError = ref("");
 const selectedInputs = ref<Record<UploadKey, string[]>>({
   images: [],
   towerSd: [],
@@ -69,13 +73,37 @@ const uploadSources = computed(() => [
 ]);
 
 const environmentMetrics = [
-  ["湿度", "40.13 %"],
-  ["光照", "3699.18 Lux"],
-  ["气压", "101.15 kPa"],
-  ["风速", "0.59 m/s"],
+  ["湿度", "40.1348 %"],
+  ["光照", "3699.1814 Lux"],
+  ["气压", "101.1453 kPa"],
+  ["环境降雨量", "0.0000 mm"],
+  ["环境温度", "-5.1495 C"],
+  ["环境风向", "58.5088 deg"],
+  ["风速", "0.5855 m/s"],
   ["土壤湿度", "0.00 %"],
-  ["土壤温度", "-5.65 C"],
+  ["土壤温度", "-5.6451 C"],
 ];
+
+const analysisTimeItems = [
+  { label: "起始时间", value: "2026-03-05 16:34:48.570" },
+  { label: "结束时间", value: "2026-03-05 16:41:44.347" },
+  { label: "线路号", value: "YX-2026-04-17" },
+  { label: "分析状态", value: "演示结果已生成" },
+];
+
+const gnssMetrics = [
+  ["平均纬度", "45.728432664"],
+  ["平均经度", "126.624992828"],
+  ["平均海拔高度", "141.107317 m"],
+];
+
+const imuMetrics = [
+  ["最终 X 变化", "-0.005559 m"],
+  ["最终 Y 变化", "-0.04544 m"],
+  ["最终 Z 变化", "0.009745 m"],
+];
+
+
 
 const towerRows = [
   { date: "2026-04-17", line: "1-1", tower: "20200422009", type: "直角", material: "无缝", project: "CRP", status: "运行中", risk: "常规" },
@@ -103,6 +131,38 @@ function formatSelectionDetail(filePaths: string[], emptyText: string): string {
   const fileNames = filePaths.slice(0, 2).map(getFileName);
   const extraCount = filePaths.length - fileNames.length;
   return extraCount > 0 ? `${fileNames.join("、")} 等 ${filePaths.length} 项` : fileNames.join("、");
+}
+
+async function handleValidateRoute(): Promise<void> {
+  if (isSubmittingAnalysis.value) {
+    return;
+  }
+
+  if (!routeId.value.trim()) {
+    routeId.value = "YX-2026-04-17";
+  }
+
+  if (!apiBaseUrl.value) {
+    analysisSubmitError.value = "后端服务尚未连接，请稍后重试。";
+    return;
+  }
+
+  isSubmittingAnalysis.value = true;
+  analysisSubmitError.value = "";
+  analysisSubmitMessage.value = "任务已提交，后端正在处理，请等待...";
+
+  try {
+    const result = await submitDemoAnalysisTask(apiBaseUrl.value, routeId.value);
+    routeId.value = result.route_id;
+    analysisSubmitMessage.value = "分析完成，正在进入数据分析页...";
+    hasAnalysisResult.value = true;
+    hasRiskReport.value = true;
+    activePage.value = "analysis";
+  } catch (error) {
+    analysisSubmitError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    isSubmittingAnalysis.value = false;
+  }
 }
 
 async function handleSelectUpload(key: UploadKey): Promise<void> {
@@ -182,10 +242,6 @@ onMounted(async () => {
           <h1>{{ activePageMeta.title }}</h1>
           <span>{{ activePageMeta.subtitle }}</span>
         </div>
-        <div class="header-actions">
-          <button type="button" class="ghost-button">导入记录</button>
-          <button type="button" class="primary-button">新建任务</button>
-        </div>
       </header>
 
       <section class="content-stage">
@@ -196,17 +252,28 @@ onMounted(async () => {
                 <span>线路信息</span>
                 <h2>采集批次导入</h2>
               </div>
-              <strong>未开始</strong>
+              <strong>{{ isSubmittingAnalysis ? "处理中" : hasAnalysisResult ? "已完成" : "未开始" }}</strong>
             </div>
 
             <div class="import-form">
               <div class="route-field">
                 <label class="field-label required" for="route-id">线路号</label>
                 <div class="route-input">
-                  <input id="route-id" type="text" placeholder="请输入线路号，例如 YX-2026-04-17" aria-label="线路号" />
-                  <button type="button">校验线路</button>
+                  <input
+                    id="route-id"
+                    v-model="routeId"
+                    type="text"
+                    placeholder="请输入线路号，例如 YX-2026-04-17"
+                    aria-label="线路号"
+                  />
+                  <button type="button" :disabled="isSubmittingAnalysis" @click="handleValidateRoute">
+                    {{ isSubmittingAnalysis ? "请等待" : "校验线路" }}
+                  </button>
                 </div>
                 <p class="field-hint">请先输入线路号，系统会按线路号归档图片、SD 卡文件和点云文件。</p>
+                <div v-if="analysisSubmitMessage || analysisSubmitError" class="task-status" :class="{ error: analysisSubmitError }">
+                  <span>{{ analysisSubmitError || analysisSubmitMessage }}</span>
+                </div>
               </div>
 
               <div class="upload-picker-grid">
@@ -300,30 +367,42 @@ onMounted(async () => {
             <div class="visual-panel">
               <div class="panel-title">
                 <div>
-                  <span>点云图</span>
+                  <span>渐进点云</span>
                   <h2>杆塔与地表</h2>
                 </div>
-                <strong>有效点 984</strong>
+                <strong>Potree LOD</strong>
               </div>
-              <img :src="analysisPreview" alt="点云分析预览" />
+              <PointCloudViewer :base-url="apiBaseUrl" />
             </div>
 
-            <div class="wide-panel analysis-summary">
-              <div>
-                <span>平均纬度</span>
-                <strong>45.728432664</strong>
+            <div class="wide-panel ppt-analysis-panel">
+              <div class="panel-title">
+                <div>
+                  <span>数据分析明细</span>
+                  <h2>位置、沉降与地表指标</h2>
+                </div>
               </div>
-              <div>
-                <span>平均经度</span>
-                <strong>126.624992828</strong>
-              </div>
-              <div>
-                <span>平均海拔</span>
-                <strong>141.107317 m</strong>
-              </div>
-              <div>
-                <span>高度变化</span>
-                <strong>0.009745 m</strong>
+
+              <div class="analysis-detail-grid">
+                <section>
+                  <h3>GNSS 位置结果</h3>
+                  <dl>
+                    <div v-for="[name, value] in gnssMetrics" :key="name">
+                      <dt>{{ name }}</dt>
+                      <dd>{{ value }}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section>
+                  <h3>IMU 静止积分漂移</h3>
+                  <dl>
+                    <div v-for="[name, value] in imuMetrics" :key="name">
+                      <dt>{{ name }}</dt>
+                      <dd>{{ value }}</dd>
+                    </div>
+                  </dl>
+                </section>
               </div>
             </div>
           </template>
@@ -433,7 +512,6 @@ onMounted(async () => {
                 <span>{{ factor.label }}</span>
                 <strong>{{ factor.value }}</strong>
               </article>
-              <button type="button" class="risk-action">生成风险评估</button>
             </div>
 
             <div class="visual-panel">
@@ -444,7 +522,7 @@ onMounted(async () => {
                 </div>
                 <strong>中风险</strong>
               </div>
-              <img :src="riskPreview" alt="杆塔风险评估预览" />
+              <img :src="towerStressPreview" alt="杆塔应力云图" />
             </div>
 
             <div class="wide-panel risk-result">
@@ -453,7 +531,8 @@ onMounted(async () => {
                 <strong>72</strong>
               </div>
               <p>
-                当前杆塔存在持续沉降与受力偏移叠加风险。建议安排复核测量，重点检查塔基周边土体含水率、拉线状态与横担连接点。
+                当前杆塔存在持续沉降与受力偏移叠加风险，塔基周边土体含水率变化会进一步放大结构倾斜和局部应力集中。
+                建议安排复核测量，重点检查塔基周边土体、拉线状态与横担连接点。根据演示模型推算，如果遇到 8 级及以上级别大风、暴雨级大雨，持续 2 天，将发生倒坍风险，应提前采取塔基加固、排水疏导和现场警戒措施。
               </p>
             </div>
           </template>

@@ -198,12 +198,7 @@ button {
   font-size: 14px;
 }
 
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
 
-.header-actions button,
 .route-input button,
 .upload-tile button,
 .table-actions button,
@@ -377,6 +372,13 @@ button {
   height: 58px;
 }
 
+.route-input button:disabled {
+  color: #eef7f5;
+  background: #7fa9a3;
+  border-color: #7fa9a3;
+  cursor: wait;
+}
+
 .field-hint {
   margin: 14px 0 0;
   padding: 12px 14px;
@@ -388,6 +390,24 @@ button {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.6;
+}
+
+.task-status {
+  margin-top: 14px;
+  padding: 12px 14px;
+  color: #2f6f66;
+  background: #e2f3f0;
+  border: 1px solid #96c9c2;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.task-status.error {
+  color: #a74739;
+  background: #fff0ee;
+  border-color: #d8aaa3;
 }
 
 .step-strip {
@@ -532,6 +552,114 @@ button {
   background: #0f1718;
   border: 1px solid #ccd7d4;
   border-radius: 8px;
+}
+
+.pointcloud-viewer {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 420px;
+  background: #0b1717;
+  border: 1px solid #ccd7d4;
+  border-radius: 8px;
+}
+
+.pointcloud-viewport {
+  width: 100%;
+  height: 100%;
+}
+
+.pointcloud-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pointcloud-hud,
+.pointcloud-tools,
+.pointcloud-error {
+  position: absolute;
+  z-index: 2;
+  background: rgba(251, 254, 253, 0.92);
+  border: 1px solid rgba(200, 221, 217, 0.92);
+  border-radius: 8px;
+}
+
+.pointcloud-hud {
+  top: 14px;
+  left: 14px;
+  min-width: 260px;
+  padding: 12px 14px;
+}
+
+.pointcloud-hud span,
+.pointcloud-hud strong,
+.pointcloud-hud small {
+  display: block;
+}
+
+.pointcloud-hud span {
+  color: #2f6f66;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pointcloud-hud strong {
+  margin-top: 7px;
+  color: #1f2d2f;
+  font-size: 17px;
+}
+
+.pointcloud-hud small {
+  margin-top: 6px;
+  color: #5f7370;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pointcloud-tools {
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.pointcloud-tools button {
+  height: 34px;
+  padding: 0 12px;
+  color: #2f6f66;
+  background: #ffffff;
+  border: 1px solid #96c9c2;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pointcloud-error {
+  right: 14px;
+  left: 14px;
+  bottom: 14px;
+  padding: 12px 14px;
+  border-color: #d8aaa3;
+}
+
+.pointcloud-error strong,
+.pointcloud-error span {
+  display: block;
+}
+
+.pointcloud-error strong {
+  color: #a74739;
+  font-size: 14px;
+}
+
+.pointcloud-error span {
+  margin-top: 6px;
+  color: #314441;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .empty-state-panel {
@@ -794,6 +922,43 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.analysis-run-panel {
+  border-color: #98c9c3;
+}
+
+.analysis-run-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.analysis-run-grid article {
+  min-height: 78px;
+  padding: 14px;
+  background: #f8fcfb;
+  border: 1px solid #d1e3df;
+  border-radius: 8px;
+}
+
+.analysis-run-grid span,
+.analysis-run-grid strong {
+  display: block;
+}
+
+.analysis-run-grid span {
+  color: #5f7370;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.analysis-run-grid strong {
+  margin-top: 10px;
+  color: #1f2d2f;
+  font-size: 16px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .analysis-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -823,6 +988,91 @@ button {
   margin-top: 10px;
   color: #1f2d2f;
   font-size: 18px;
+}
+
+.ppt-analysis-panel,
+.ppt-text-panel {
+  background: #fbfefd;
+}
+
+.analysis-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.analysis-detail-grid section,
+.ppt-section-list section {
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #d1e3df;
+  border-radius: 8px;
+}
+
+.analysis-detail-grid h3,
+.ppt-section-list h3 {
+  margin: 0 0 14px;
+  color: #1f2d2f;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.analysis-detail-grid dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.analysis-detail-grid dl div {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 34px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e1ece9;
+}
+
+.analysis-detail-grid dl div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.analysis-detail-grid dt,
+.analysis-detail-grid dd {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.analysis-detail-grid dt {
+  color: #5f7370;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.analysis-detail-grid dd {
+  color: #1f2d2f;
+  font-size: 14px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.ppt-section-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ppt-section-list ul {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.ppt-section-list li {
+  color: #314441;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .database-page {

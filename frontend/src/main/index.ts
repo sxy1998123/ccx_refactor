@@ -84,6 +84,15 @@ function getAppIconPath(): string {
   return path.join(process.resourcesPath, "resources", "icon.png");
 }
 
+function getDemoPointcloudPath(): string {
+  const pointCloudFile = path.join("pointcloud_demo", "geomap_20260321_122228.pcd");
+  if (isDev()) {
+    return path.resolve(app.getAppPath(), "..", "backend", pointCloudFile);
+  }
+
+  return path.join(process.resourcesPath, "backend", pointCloudFile);
+}
+
 function getFreePort(startPort: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -174,6 +183,7 @@ async function startBackend(): Promise<ApiConfig> {
     CCX_ENV: isDev() ? "development" : "production",
     CCX_RELOAD: isDev() ? "1" : "0",
     CCX_DATA_DIR: app.getPath("userData"),
+    CCX_DEMO_POINTCLOUD: getDemoPointcloudPath(),
   };
 
   nodeInfo(`starting python backend at ${baseUrl}`);
@@ -303,6 +313,7 @@ if (!gotLock) {
   app
     .whenReady()
     .then(async () => {
+      // 隐藏控制台和menubar
       Menu.setApplicationMenu(null);
       registerPreviewProtocol();
 
