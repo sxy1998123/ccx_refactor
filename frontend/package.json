@@ -1,0 +1,27 @@
+{
+  "name": "ccx-desktop",
+  "version": "0.1.0",
+  "description": "CCX desktop application",
+  "main": "./out/main/index.js",
+  "author": "CCX",
+  "homepage": "./",
+  "scripts": {
+    "dev": "node scripts/run-electron-vite.mjs dev",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "npm run typecheck && node scripts/run-electron-vite.mjs build",
+    "preview": "node scripts/run-electron-vite.mjs preview"
+  },
+  "dependencies": {
+    "vue": "3.5.32"
+  },
+  "devDependencies": {
+    "@swc/core": "1.15.8",
+    "@types/node": "25.6.0",
+    "@vitejs/plugin-vue": "6.0.6",
+    "electron": "39.8.8",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.2",
+    "vue-tsc": "3.2.6"
+  }
+}
