@@ -11,6 +11,7 @@ frontend/release/
 
 backend/.venv/
 backend/.ccx-data/
+backend/data/
 backend/build/
 backend/dist/
 backend/*.spec

@@ -145,6 +145,31 @@ function createImagePreviewUrl(imagePath: string): string {
   return `ccx-preview://image/${previewId}`;
 }
 
+function getImageMimeType(imagePath: string): string {
+  const ext = path.extname(imagePath).toLowerCase();
+  switch (ext) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".bmp":
+      return "image/bmp";
+    case ".webp":
+      return "image/webp";
+    case ".tif":
+    case ".tiff":
+      return "image/tiff";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+async function createImageDataUrl(imagePath: string): Promise<string> {
+  const content = await fs.promises.readFile(imagePath);
+  return `data:${getImageMimeType(imagePath)};base64,${content.toString("base64")}`;
+}
+
 async function waitForBackend(baseUrl: string, timeoutMs = 30000): Promise<void> {
   const startedAt = Date.now();
 
@@ -314,7 +339,7 @@ if (!gotLock) {
     .whenReady()
     .then(async () => {
       // 隐藏控制台和menubar
-      Menu.setApplicationMenu(null);
+      // Menu.setApplicationMenu(null);
       registerPreviewProtocol();
 
       ipcMain.handle("ccx:get-api-config", async () => {
@@ -331,10 +356,35 @@ if (!gotLock) {
             },
           ],
         });
+        const images = [];
+        for (const imagePath of imagePaths) {
+          try {
+            images.push({
+              path: imagePath,
+              name: path.basename(imagePath),
+              dataUrl: await createImageDataUrl(imagePath),
+            });
+          } catch (error) {
+            nodeError(
+              `failed to encode image as base64 path=${imagePath} error=${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }
+
         return {
           paths: imagePaths,
-          previewUrl: imagePaths.length ? createImagePreviewUrl(imagePaths[0]) : "",
+          previewUrl: images[0]?.dataUrl ?? "",
+          images,
         };
+      });
+      ipcMain.handle("ccx:create-image-preview", async (_event, imagePath: unknown) => {
+        if (typeof imagePath !== "string" || !imagePath.trim()) {
+          return "";
+        }
+
+        return createImagePreviewUrl(imagePath);
       });
       ipcMain.handle("ccx:select-tower-sd-directories", async () => {
         return selectInputFiles({

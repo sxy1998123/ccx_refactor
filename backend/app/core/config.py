@@ -1,5 +1,7 @@
 import os
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -7,6 +9,21 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if raw_value is None:
         return default
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _backend_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+
+    return Path(__file__).resolve().parents[2]
+
+
+def _database_path() -> Path:
+    configured_path = os.getenv("CCX_DATABASE_PATH")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    return (_backend_root() / "data" / "ccx.sqlite3").resolve()
 
 
 @dataclass(frozen=True)
@@ -17,6 +34,7 @@ class Settings:
     host: str = os.getenv("CCX_HOST", "127.0.0.1")
     port: int = int(os.getenv("CCX_PORT", "18080"))
     reload: bool = _env_bool("CCX_RELOAD", False)
+    database_path: Path = field(default_factory=_database_path)
 
 
 settings = Settings()
