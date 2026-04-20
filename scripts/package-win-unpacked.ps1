@@ -51,6 +51,7 @@ try {
     --onedir `
     --name backend `
     --paths . `
+    --add-data "app/db/schema.sql;app/db" `
     --hidden-import app.main `
     --hidden-import uvicorn.loops.auto `
     --hidden-import uvicorn.protocols.http.auto `
