@@ -2,10 +2,11 @@
 import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { getDemoPointcloudManifest, type PotreeManifest, type PotreeNode } from "../services/api";
+import { getPointcloudManifest, type PotreeManifest, type PotreeNode } from "../services/api";
 
 const props = defineProps<{
   baseUrl: string;
+  manifestPath: string;
 }>();
 
 const viewportRef = ref<HTMLDivElement | null>(null);
@@ -29,9 +30,9 @@ let activeRunId = 0;
 let currentManifest: PotreeManifest | null = null;
 
 watch(
-  () => props.baseUrl,
-  (baseUrl) => {
-    if (!baseUrl) {
+  () => [props.baseUrl, props.manifestPath] as const,
+  ([baseUrl]) => {
+    if (!baseUrl || !props.manifestPath) {
       statusText.value = "等待后端服务";
       return;
     }
@@ -58,7 +59,7 @@ async function loadPointCloud(baseUrl: string): Promise<void> {
   loadedPoints.value = 0;
   totalVisiblePoints.value = 0;
   sourcePoints.value = 0;
-  statusText.value = "正在准备点云瓦片";
+  statusText.value = "正在准备点云数据";
 
   await nextTick();
   if (runId !== activeRunId) {
@@ -68,7 +69,7 @@ async function loadPointCloud(baseUrl: string): Promise<void> {
   initializeScene();
 
   try {
-    const manifest = await getDemoPointcloudManifest(baseUrl, abortController.signal);
+    const manifest = await getPointcloudManifest(baseUrl, props.manifestPath, abortController.signal);
     if (runId !== activeRunId) {
       return;
     }
@@ -107,7 +108,6 @@ function initializeScene(): void {
   }
 
   disposeScene();
-
   scene = new THREE.Scene();
   scene.background = new THREE.Color("#0b1717");
 
@@ -121,9 +121,7 @@ function initializeScene(): void {
 
   pointGroup = new THREE.Group();
   scene.add(pointGroup);
-
-  const axes = new THREE.AxesHelper(18);
-  scene.add(axes);
+  scene.add(new THREE.AxesHelper(18));
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -131,9 +129,7 @@ function initializeScene(): void {
   controls.screenSpacePanning = false;
   controls.target.set(0, 0, 0);
 
-  resizeObserver = new ResizeObserver(() => {
-    resizeRenderer();
-  });
+  resizeObserver = new ResizeObserver(resizeRenderer);
   resizeObserver.observe(viewport);
   resizeRenderer();
   animate();
@@ -208,17 +204,15 @@ function fitCameraToBounds(min: [number, number, number], max: [number, number, 
 }
 
 function resetCameraView(): void {
-  if (!currentManifest) {
-    return;
+  if (currentManifest) {
+    fitCameraToBounds(currentManifest.bounds.min, currentManifest.bounds.max);
   }
-  fitCameraToBounds(currentManifest.bounds.min, currentManifest.bounds.max);
 }
 
 function reloadPointCloud(): void {
-  if (!props.baseUrl) {
-    return;
+  if (props.baseUrl) {
+    void loadPointCloud(props.baseUrl);
   }
-  void loadPointCloud(props.baseUrl);
 }
 
 function resizeRenderer(): void {
@@ -253,19 +247,17 @@ function disposeScene(): void {
   resizeObserver?.disconnect();
   resizeObserver = null;
 
-  if (pointGroup) {
-    pointGroup.traverse((object) => {
-      if (object instanceof THREE.Points) {
-        object.geometry.dispose();
-        const material = object.material;
-        if (Array.isArray(material)) {
-          material.forEach((item) => item.dispose());
-        } else {
-          material.dispose();
-        }
+  pointGroup?.traverse((object) => {
+    if (object instanceof THREE.Points) {
+      object.geometry.dispose();
+      const material = object.material;
+      if (Array.isArray(material)) {
+        material.forEach((item) => item.dispose());
+      } else {
+        material.dispose();
       }
-    });
-  }
+    }
+  });
 
   renderer?.dispose();
   renderer?.domElement.remove();

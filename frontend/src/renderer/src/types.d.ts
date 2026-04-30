@@ -22,5 +22,6 @@ interface Window {
     selectTowerSdDirectories: () => Promise<string[]>;
     selectGroundSdDirectory: () => Promise<string[]>;
     selectPointCloud: () => Promise<string[]>;
+    selectTxtFile: (title: string) => Promise<string[]>;
   };
 }

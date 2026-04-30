@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import hashlib
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 import numpy as np
 
-DEMO_POINTCLOUD_NAME = "geomap_20260321_122228.pcd"
 MANIFEST_NAME = "manifest.json"
 NODE_FORMAT = "float32x3+uint32rgb"
 POINT_STRIDE_BYTES = 16
@@ -24,47 +24,45 @@ class PointCloudError(RuntimeError):
     pass
 
 
-def get_demo_pointcloud_source() -> Path:
-    configured_path = os.getenv("CCX_DEMO_POINTCLOUD")
-    if configured_path:
-        return Path(configured_path).expanduser().resolve()
-
-    backend_root = Path(__file__).resolve().parents[2]
-    return backend_root / "pointcloud_demo" / DEMO_POINTCLOUD_NAME
-
-
-def get_potree_cache_dir() -> Path:
+def get_pointcloud_cache_dir(cache_key: str) -> Path:
     data_dir = Path(os.getenv("CCX_DATA_DIR", Path.cwd() / ".ccx-data")).expanduser().resolve()
-    return data_dir / "pointcloud_cache" / "demo_potree_v1"
+    safe_key = "".join(char for char in cache_key if char.isalnum() or char in {"-", "_"})[:80]
+    return data_dir / "pointcloud_cache" / safe_key
 
 
-def get_demo_manifest() -> dict[str, Any]:
-    source_path = get_demo_pointcloud_source()
-    cache_dir = get_potree_cache_dir()
+def get_manifest_for_source(source_path: str | os.PathLike, cache_key: str, node_url_prefix: str) -> dict[str, Any]:
+    source = Path(source_path).expanduser().resolve()
+    if not source.exists():
+        raise PointCloudError(f"Point cloud file not found: {source}")
 
-    if not source_path.exists():
-        raise PointCloudError(f"Demo point cloud file not found: {source_path}")
-
+    cache_dir = get_pointcloud_cache_dir(cache_key)
     with _build_lock:
-        manifest = _load_cached_manifest(cache_dir, source_path)
+        manifest = _load_cached_manifest(cache_dir, source)
         if manifest is None:
-            manifest = _build_demo_cache(source_path, cache_dir)
+            manifest = _build_demo_cache(source, cache_dir)
 
-    return _with_absolute_node_urls(manifest)
+    return _with_node_url_prefix(manifest, node_url_prefix)
 
 
-def get_demo_node_path(node_id: str) -> Path:
+def get_node_path_for_source(source_path: str | os.PathLike, cache_key: str, node_id: str, node_url_prefix: str) -> Path:
     if not node_id or any(char not in "r01234567" for char in node_id) or not node_id.startswith("r"):
         raise PointCloudError(f"Invalid point cloud node id: {node_id}")
 
-    node_path = get_potree_cache_dir() / "nodes" / f"{node_id}.bin"
+    cache_dir = get_pointcloud_cache_dir(cache_key)
+    node_path = cache_dir / "nodes" / f"{node_id}.bin"
     if not node_path.exists():
-        get_demo_manifest()
+        get_manifest_for_source(source_path, cache_key, node_url_prefix)
 
     if not node_path.exists():
         raise PointCloudError(f"Point cloud node not found: {node_id}")
 
     return node_path
+
+
+def cache_key_for_source(prefix: str, source_path: str | os.PathLike) -> str:
+    source = str(Path(source_path).expanduser().resolve()).encode("utf-8", errors="ignore")
+    digest = hashlib.sha1(source).hexdigest()[:16]
+    return f"{prefix}_{digest}_potree_v1"
 
 
 def _load_cached_manifest(cache_dir: Path, source_path: Path) -> dict[str, Any] | None:
@@ -163,7 +161,7 @@ def _build_demo_cache(source_path: Path, cache_dir: Path) -> dict[str, Any]:
     stat = source_path.stat()
     manifest = {
         "version": 1,
-        "name": "demo_potree_pointcloud",
+        "name": "potree_pointcloud",
         "source": {
             "file": str(source_path),
             "size": stat.st_size,
@@ -225,16 +223,40 @@ def _open_supported_pcd(source_path: Path, header: dict[str, Any]) -> np.memmap:
     types = header.get("type", [])
     counts = [int(value) for value in header.get("count", [])]
 
-    expected_fields = ["x", "y", "z", "rgb"]
-    if fields != expected_fields or sizes != [4, 4, 4, 4] or types != ["F", "F", "F", "F"] or counts != [1, 1, 1, 1]:
-        raise PointCloudError(
-            "Only binary PCD with FIELDS x y z rgb, SIZE 4 4 4 4, TYPE F F F F is supported for the demo route"
-        )
+    if not {"x", "y", "z"}.issubset(set(fields)):
+        raise PointCloudError("PCD must contain x, y and z fields")
+    if len(fields) != len(sizes) or len(fields) != len(types) or len(fields) != len(counts):
+        raise PointCloudError("PCD header FIELDS/SIZE/TYPE/COUNT lengths do not match")
+    if any(count != 1 for count in counts):
+        raise PointCloudError("Only PCD fields with COUNT 1 are supported")
     if header.get("data") != "binary":
-        raise PointCloudError("Only DATA binary PCD files are supported for the demo route")
+        raise PointCloudError("Only DATA binary PCD files are supported")
 
-    dtype = np.dtype([("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("rgb", "<f4")])
+    dtype_fields = []
+    for field, size, field_type in zip(fields, sizes, types, strict=True):
+        dtype_fields.append((field, _pcd_dtype(field, size, field_type)))
+    dtype = np.dtype(dtype_fields)
     return np.memmap(source_path, dtype=dtype, mode="r", offset=int(header["data_offset"]), shape=(int(header["points"]),))
+
+
+def _pcd_dtype(field: str, size: int, field_type: str) -> str:
+    if field_type == "F" and size == 4:
+        return "<f4"
+    if field_type == "F" and size == 8:
+        return "<f8"
+    if field_type == "U" and size == 1:
+        return "u1"
+    if field_type == "U" and size == 2:
+        return "<u2"
+    if field_type == "U" and size == 4:
+        return "<u4"
+    if field_type == "I" and size == 1:
+        return "i1"
+    if field_type == "I" and size == 2:
+        return "<i2"
+    if field_type == "I" and size == 4:
+        return "<i4"
+    raise PointCloudError(f"Unsupported PCD field type for {field}: TYPE {field_type}, SIZE {size}")
 
 
 def _prepare_bounds(points: np.memmap) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -297,7 +319,14 @@ def _write_node(
     output["x"] = points["x"][selected]
     output["y"] = points["y"][selected]
     output["z"] = points["z"][selected]
-    output["rgb"] = np.asarray(points["rgb"][selected], dtype=np.float32).view(np.uint32)
+    if "rgb" in points.dtype.names:
+        rgb_values = points["rgb"][selected]
+        if rgb_values.dtype.kind == "f":
+            output["rgb"] = np.asarray(rgb_values, dtype=np.float32).view(np.uint32)
+        else:
+            output["rgb"] = np.asarray(rgb_values, dtype=np.uint32)
+    else:
+        output["rgb"] = np.uint32(0xD8E4E0)
 
     node_path = nodes_dir / f"{node_id}.bin"
     output.tofile(node_path)
@@ -309,7 +338,7 @@ def _write_node(
         "sourcePointCount": int(indices.size),
         "byteSize": int(node_path.stat().st_size),
         "bounds": {"min": _to_float_list(bounds_min), "max": _to_float_list(bounds_max)},
-        "url": f"/api/demo/pointcloud/potree/nodes/{node_id}.bin",
+        "url": "",
     }
 
 
@@ -348,9 +377,10 @@ def _to_float_list(values: np.ndarray) -> list[float]:
     return [float(value) for value in values]
 
 
-def _with_absolute_node_urls(manifest: dict[str, Any]) -> dict[str, Any]:
+def _with_node_url_prefix(manifest: dict[str, Any], node_url_prefix: str) -> dict[str, Any]:
     copied = dict(manifest)
     copied["nodes"] = [dict(node) for node in manifest.get("nodes", [])]
+    prefix = node_url_prefix.rstrip("/")
     for node in copied["nodes"]:
-        node["url"] = f"/api/demo/pointcloud/potree/nodes/{node['id']}.bin"
+        node["url"] = f"{prefix}/{node['id']}.bin"
     return copied

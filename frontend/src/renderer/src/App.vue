@@ -16,6 +16,7 @@ const appInfo = ref<AppInfo | null>(null);
 const activePage = ref<PageKey>("input");
 const hasAnalysisResult = ref(false);
 const hasRiskReport = ref(false);
+const preprocessTaskId = ref("");
 
 const pages: Array<{ key: PageKey; title: string; subtitle: string }> = [
   { key: "input", title: "输入数据", subtitle: "线路号、影像、SD 卡与点云文件" },
@@ -30,7 +31,8 @@ function handleNavigate(page: PageKey): void {
   activePage.value = page;
 }
 
-function handleAnalysisCompleted(): void {
+function handleAnalysisCompleted(taskId: string): void {
+  preprocessTaskId.value = taskId;
   hasAnalysisResult.value = true;
   hasRiskReport.value = true;
   activePage.value = "analysis";
@@ -101,6 +103,7 @@ onMounted(async () => {
             v-else-if="activePage === 'analysis'"
             :api-base-url="apiBaseUrl"
             :has-analysis-result="hasAnalysisResult"
+            :preprocess-task-id="preprocessTaskId"
             @navigate="handleNavigate"
           />
           <DatabaseView v-else-if="activePage === 'database'" :api-base-url="apiBaseUrl" />

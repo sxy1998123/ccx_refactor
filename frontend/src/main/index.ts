@@ -405,7 +405,19 @@ if (!gotLock) {
           filters: [
             {
               name: "点云文件",
-              extensions: ["las", "laz", "pcd", "ply", "xyz", "pts", "e57"],
+              extensions: ["pcd"],
+            },
+          ],
+        });
+      });
+      ipcMain.handle("ccx:select-txt-file", async (_event, title: unknown) => {
+        return selectInputFiles({
+          title: typeof title === "string" && title.trim() ? title : "选择 TXT 文件",
+          properties: ["openFile"],
+          filters: [
+            {
+              name: "TXT 文件",
+              extensions: ["txt"],
             },
           ],
         });

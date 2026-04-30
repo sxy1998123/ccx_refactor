@@ -26,6 +26,14 @@ def _database_path() -> Path:
     return (_backend_root() / "data" / "ccx.sqlite3").resolve()
 
 
+def _data_dir() -> Path:
+    configured_path = os.getenv("CCX_DATA_DIR")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    return (_backend_root() / "data").resolve()
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("CCX_APP_NAME", "CCX Analysis Backend")
@@ -34,6 +42,7 @@ class Settings:
     host: str = os.getenv("CCX_HOST", "127.0.0.1")
     port: int = int(os.getenv("CCX_PORT", "18080"))
     reload: bool = _env_bool("CCX_RELOAD", False)
+    data_dir: Path = field(default_factory=_data_dir)
     database_path: Path = field(default_factory=_database_path)
 
 

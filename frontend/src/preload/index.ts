@@ -22,6 +22,7 @@ const api = {
   selectTowerSdDirectories: (): Promise<string[]> => ipcRenderer.invoke("ccx:select-tower-sd-directories"),
   selectGroundSdDirectory: (): Promise<string[]> => ipcRenderer.invoke("ccx:select-ground-sd-directory"),
   selectPointCloud: (): Promise<string[]> => ipcRenderer.invoke("ccx:select-point-cloud"),
+  selectTxtFile: (title: string): Promise<string[]> => ipcRenderer.invoke("ccx:select-txt-file", title),
 };
 
 contextBridge.exposeInMainWorld("ccx", api);

@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -13,19 +11,20 @@ from app.db.connection import (
 )
 from app.schemas.app_info import AppInfo
 from app.schemas.health import HealthCheck
-from app.services.pointcloud_potree import PointCloudError, get_demo_manifest, get_demo_node_path
+from app.services.pointcloud_potree import (
+    PointCloudError,
+    cache_key_for_source,
+    get_manifest_for_source,
+    get_node_path_for_source,
+)
+from app.services.preprocess import (
+    PreprocessTaskNotFound,
+    get_preprocess_result,
+    get_preprocess_task,
+    submit_preprocess_task,
+)
 
 router = APIRouter()
-
-
-class DemoAnalysisRequest(BaseModel):
-    route_id: str
-
-
-class DemoAnalysisResponse(BaseModel):
-    status: str
-    route_id: str
-    message: str
 
 
 class DatabaseRecordRequest(BaseModel):
@@ -42,6 +41,28 @@ class DatabaseDeleteResponse(BaseModel):
     table_name: str
     rowid: int
     message: str
+
+
+class PreprocessTaskRequest(BaseModel):
+    route_id: str
+    tower_type: str
+    inp_file: str
+    tower_txt_files: dict[str, str]
+    env_txt_file: str
+    image_files: list[str] = []
+    point_cloud_files: list[str] = []
+
+
+class PreprocessTaskResponse(BaseModel):
+    task_id: str
+    status: str
+    route_id: str
+    tower_type: str
+    inp_file: str
+    created_at: str
+    updated_at: str
+    message: str
+    result_url: str
 
 
 @router.get("/health", response_model=HealthCheck, tags=["system"])
@@ -101,30 +122,67 @@ def remove_database_record(table_name: str, rowid: int) -> DatabaseDeleteRespons
     )
 
 
-@router.post("/api/demo/analysis-tasks", response_model=DemoAnalysisResponse, tags=["demo"])
-async def submit_demo_analysis_task(request: DemoAnalysisRequest) -> DemoAnalysisResponse:
-    await asyncio.sleep(3)
-    route_id = request.route_id.strip() or "YX-2026-04-17"
-    return DemoAnalysisResponse(
-        status="completed",
-        route_id=route_id,
-        message="演示分析任务处理完成",
-    )
+@router.post("/api/preprocess/tasks", response_model=PreprocessTaskResponse, tags=["preprocess"])
+def create_preprocess_task(request: PreprocessTaskRequest) -> PreprocessTaskResponse:
+    payload = request.model_dump()
+    route_id = payload["route_id"].strip()
+    if not route_id:
+        raise HTTPException(status_code=400, detail="线路号不能为空")
+    payload["route_id"] = route_id
+
+    if set(payload["tower_txt_files"]) != {"tower1", "tower2", "tower3", "tower4"}:
+        raise HTTPException(status_code=400, detail="必须提交 tower1/tower2/tower3/tower4 四个塔基端 TXT 文件")
+
+    return PreprocessTaskResponse(**submit_preprocess_task(payload))
 
 
-@router.get("/api/demo/pointcloud/potree/manifest", tags=["pointcloud"])
-def demo_pointcloud_manifest() -> dict:
+@router.get("/api/preprocess/tasks/{task_id}", response_model=PreprocessTaskResponse, tags=["preprocess"])
+def preprocess_task_status(task_id: str) -> PreprocessTaskResponse:
     try:
-        return get_demo_manifest()
+        return PreprocessTaskResponse(**get_preprocess_task(task_id))
+    except PreprocessTaskNotFound as error:
+        raise HTTPException(status_code=404, detail="预处理任务不存在") from error
+
+
+@router.get("/api/preprocess/tasks/{task_id}/result", tags=["preprocess"])
+def preprocess_task_result(task_id: str) -> dict:
+    try:
+        return get_preprocess_result(task_id)
+    except PreprocessTaskNotFound as error:
+        raise HTTPException(status_code=404, detail="预处理结果不存在") from error
+
+
+@router.get("/api/preprocess/tasks/{task_id}/pointcloud/potree/manifest", tags=["pointcloud"])
+def preprocess_pointcloud_manifest(task_id: str) -> dict:
+    try:
+        result = get_preprocess_result(task_id)
+        source_path = _first_point_cloud_path(result)
+        prefix = f"/api/preprocess/tasks/{task_id}/pointcloud/potree/nodes"
+        return get_manifest_for_source(source_path, cache_key_for_source(task_id, source_path), prefix)
+    except PreprocessTaskNotFound as error:
+        raise HTTPException(status_code=404, detail="预处理任务不存在") from error
     except PointCloudError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@router.get("/api/demo/pointcloud/potree/nodes/{node_id}.bin", tags=["pointcloud"])
-def demo_pointcloud_node(node_id: str) -> FileResponse:
+@router.get("/api/preprocess/tasks/{task_id}/pointcloud/potree/nodes/{node_id}.bin", tags=["pointcloud"])
+def preprocess_pointcloud_node(task_id: str, node_id: str) -> FileResponse:
     try:
-        node_path = get_demo_node_path(node_id)
+        result = get_preprocess_result(task_id)
+        source_path = _first_point_cloud_path(result)
+        prefix = f"/api/preprocess/tasks/{task_id}/pointcloud/potree/nodes"
+        node_path = get_node_path_for_source(source_path, cache_key_for_source(task_id, source_path), node_id, prefix)
+    except PreprocessTaskNotFound as error:
+        raise HTTPException(status_code=404, detail="预处理任务不存在") from error
     except PointCloudError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
     return FileResponse(node_path, media_type="application/octet-stream")
+
+
+def _first_point_cloud_path(result: dict) -> str:
+    point_cloud_files = result.get("inputs", {}).get("point_cloud_files", [])
+    if not point_cloud_files:
+        raise PointCloudError("No point cloud file was submitted for this task")
+    return str(point_cloud_files[0])
+
