@@ -93,6 +93,14 @@ function getDemoPointcloudPath(): string {
   return path.join(process.resourcesPath, "backend", pointCloudFile);
 }
 
+function getCcxSolverRoot(): string {
+  if (isDev()) {
+    return path.resolve(app.getAppPath(), "..", "backend", "app", "vendor", "ccx");
+  }
+
+  return path.join(process.resourcesPath, "backend", "app", "vendor", "ccx");
+}
+
 function getFreePort(startPort: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -200,6 +208,7 @@ async function startBackend(): Promise<ApiConfig> {
   const backendCwd = isDev()
     ? path.resolve(app.getAppPath(), "..", "backend")
     : path.join(process.resourcesPath, "backend");
+  const backendDataDir = path.join(backendCwd, "data");
   const env = {
     ...process.env,
     CCX_HOST: "127.0.0.1",
@@ -207,7 +216,11 @@ async function startBackend(): Promise<ApiConfig> {
     CCX_TOKEN: token,
     CCX_ENV: isDev() ? "development" : "production",
     CCX_RELOAD: isDev() ? "1" : "0",
-    CCX_DATA_DIR: app.getPath("userData"),
+    CCX_DATA_DIR: backendDataDir,
+    CCX_RESULTS_DIR: path.join(backendDataDir, "risk"),
+    CCX_DATABASE_PATH: path.join(backendDataDir, "ccx.sqlite3"),
+    CCX_SOLVER_ROOT: getCcxSolverRoot(),
+    CCX_RAINFALL_DATA_DIR: path.join(getCcxSolverRoot(), "数据"),
     CCX_DEMO_POINTCLOUD: getDemoPointcloudPath(),
   };
 

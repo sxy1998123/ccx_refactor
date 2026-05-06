@@ -6,6 +6,7 @@ import { getStressCloud, type StressCloud } from "../services/api";
 
 const props = defineProps<{
   baseUrl: string;
+  taskId?: string;
 }>();
 
 const viewportRef = ref<HTMLDivElement | null>(null);
@@ -25,13 +26,13 @@ let animationFrame = 0;
 let abortController: AbortController | null = null;
 
 watch(
-  () => props.baseUrl,
-  (baseUrl) => {
+  () => [props.baseUrl, props.taskId] as const,
+  ([baseUrl, taskId]) => {
     if (!baseUrl) {
       statusText.value = "等待后端服务";
       return;
     }
-    void loadStressCloud(baseUrl);
+    void loadStressCloud(baseUrl, taskId);
   },
   { immediate: true, flush: "post" },
 );
@@ -41,17 +42,17 @@ onBeforeUnmount(() => {
   disposeScene();
 });
 
-async function loadStressCloud(baseUrl: string): Promise<void> {
+async function loadStressCloud(baseUrl: string, taskId?: string): Promise<void> {
   abortController?.abort();
   abortController = new AbortController();
-  statusText.value = "正在读取 base h5";
+  statusText.value = taskId ? "正在读取风险 h5" : "正在读取 base h5";
   errorText.value = "";
 
   await nextTick();
   initializeScene();
 
   try {
-    const cloud = await getStressCloud(baseUrl, abortController.signal);
+    const cloud = await getStressCloud(baseUrl, taskId, abortController.signal);
     renderCloud(cloud);
     elementCount.value = cloud.elements.length;
     maxStressText.value = formatStress(cloud.max_stress.value);

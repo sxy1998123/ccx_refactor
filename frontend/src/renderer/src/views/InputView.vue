@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { submitPreprocessTask, type PreprocessTaskResponse } from "../services/api";
+import { submitPreprocessTask, type PreprocessTaskResponse, type RiskTaskResponse } from "../services/api";
 
 type TowerTxtKey = "tower1" | "tower2" | "tower3" | "tower4";
 
@@ -26,6 +26,7 @@ const props = defineProps<{
   apiBaseUrl: string;
   hasAnalysisResult: boolean;
   preprocessTask: PreprocessTaskResponse | null;
+  riskTask: RiskTaskResponse | null;
 }>();
 
 const emit = defineEmits<{
@@ -85,10 +86,27 @@ const taskStatusText = computed(() => {
   if (shouldShowTaskState.value) {
     return props.preprocessTask?.message || analysisSubmitMessage.value || "";
   }
+  if (props.riskTask?.status === "queued" || props.riskTask?.status === "running") {
+    return props.riskTask.message || "正在执行风险评估";
+  }
+  if (props.riskTask?.status === "failed") {
+    return props.riskTask.message || "风险评估失败";
+  }
   return analysisSubmitMessage.value;
 });
-const taskStatusHasError = computed(() => Boolean(analysisSubmitError.value) || props.preprocessTask?.status === "failed");
+const taskStatusHasError = computed(() => Boolean(analysisSubmitError.value) || props.preprocessTask?.status === "failed" || props.riskTask?.status === "failed");
 const taskMetaItems = computed(() => {
+  if (props.riskTask?.status === "queued" || props.riskTask?.status === "running") {
+    const progress = props.riskTask.progress;
+    const progressText = progress?.total ? `进度：${progress.current}/${progress.total}` : "进度：准备中";
+    return [
+      `任务号：${props.riskTask.task_id}`,
+      `线路号：${props.riskTask.route_id || "--"}`,
+      `状态：风险评估中`,
+      progressText,
+    ];
+  }
+
   if (!props.preprocessTask || !shouldShowTaskState.value) {
     return [];
   }
@@ -97,6 +115,43 @@ const taskMetaItems = computed(() => {
     `任务号：${props.preprocessTask.task_id}`,
     `线路号：${props.preprocessTask.route_id || "--"}`,
     `状态：${props.preprocessTask.status}`,
+  ];
+});
+const workflowSteps = computed(() => {
+  const preprocessStatus = props.preprocessTask?.status;
+  const riskStatus = props.riskTask?.status;
+  const isTxtReady = selectedTowerCount.value === 4 && Boolean(envTxtFile.value);
+  return [
+    {
+      key: "basic",
+      label: "基础信息",
+      status: preprocessStatus ? "done" : routeId.value.trim() && towerType.value ? "done" : "active",
+      loading: false,
+    },
+    {
+      key: "txt",
+      label: "TXT 文件校验",
+      status: preprocessStatus ? "done" : isTxtReady ? "done" : "pending",
+      loading: false,
+    },
+    {
+      key: "preprocess",
+      label: "预处理",
+      status: preprocessStatus === "failed" ? "error" : preprocessStatus === "completed" ? "done" : isSubmittingAnalysis.value ? "active" : "pending",
+      loading: preprocessStatus === "queued" || preprocessStatus === "running" || isSubmittingRequest.value,
+    },
+    {
+      key: "analysis",
+      label: "数据分析",
+      status: props.hasAnalysisResult ? "done" : "pending",
+      loading: false,
+    },
+    {
+      key: "risk",
+      label: "风险评估",
+      status: riskStatus === "failed" ? "error" : riskStatus === "completed" ? "done" : riskStatus === "queued" || riskStatus === "running" ? "active" : "pending",
+      loading: riskStatus === "queued" || riskStatus === "running",
+    },
   ];
 });
 
@@ -352,7 +407,7 @@ watch(
 );
 
 watch(
-  () => props.preprocessTask?.status,
+  () => props.riskTask?.status,
   (status) => {
     if (status === "completed") {
       clearInputFormState();
@@ -485,16 +540,20 @@ watch(
             <small v-for="item in taskMetaItems" :key="item">{{ item }}</small>
           </div>
           <button type="button" :disabled="isSubmittingAnalysis" @click="handleSubmitPreprocess">
-            {{ isSubmittingAnalysis ? "请等待" : "开始预处理" }}
+            {{ isSubmittingAnalysis ? "请等待" : "开始处理" }}
           </button>
         </div>
       </div>
 
       <div class="step-strip">
-        <span>1. 基础信息</span>
-        <span>2. TXT 文件校验</span>
-        <span>3. 预处理任务</span>
-        <span>4. 数据分析</span>
+        <span
+          v-for="(step, index) in workflowSteps"
+          :key="step.key"
+          :class="[step.status, { loading: step.loading }]"
+        >
+          <i v-if="step.loading" aria-hidden="true"></i>
+          {{ index + 1 }}. {{ step.label }}
+        </span>
       </div>
     </div>
   </section>

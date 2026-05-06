@@ -90,6 +90,89 @@ export type PreprocessTaskResponse = {
   result_url: string;
 };
 
+export type RiskTaskStatus = "queued" | "running" | "completed" | "failed";
+
+export type RiskTaskResponse = {
+  task_id: string;
+  status: RiskTaskStatus;
+  stage: string;
+  stage_label: string;
+  route_id: string;
+  tower_type: string;
+  inp_file: string;
+  created_at: string;
+  updated_at: string;
+  message: string;
+  progress: {
+    current: number;
+    total: number;
+  };
+  result_url: string;
+};
+
+export type RainfallRiskCase = {
+  case: string;
+  label: string;
+  rainfall_mm: number | null;
+  day: number | null;
+  max_abs_stress_pa: number | null;
+  risk_index: number | null;
+  stress_over_limit: boolean;
+  h5_path: string;
+};
+
+export type RiskResult = {
+  task_id: string;
+  status: RiskTaskStatus;
+  stage_label: string;
+  message: string;
+  route_id: string;
+  tower_type: string;
+  inp_file: string;
+  created_at?: string;
+  completed_at?: string;
+  base?: {
+    h5_path: string;
+    summary_csv: string;
+    returncode: number;
+    applied_displacement_m: {
+      x: number;
+      y: number;
+      z: number;
+    };
+    max_stress: number | null;
+    max_abs_stress: number | null;
+    stress_limit_pa: number;
+    risk_index: number | null;
+    stress_element: number | null;
+    stress_component: number | null;
+    stress_error: string;
+  };
+  full?: {
+    summary_csv: string;
+    case_count: number;
+    rainfall_data_dir: string;
+    summary: {
+      cases?: RainfallRiskCase[];
+      over_limit_cases?: RainfallRiskCase[];
+      damage_conclusions_text?: string;
+      max_case?: {
+        label?: string;
+        rainfall_mm?: number | null;
+        day?: number | null;
+        risk_index?: number | null;
+      } | null;
+    };
+  };
+  report?: {
+    risk_level: string;
+    risk_index: number | null;
+    description: string;
+    collapse_prediction: string;
+    recommendation: string;
+  };
+};
+
 export type PreprocessMetric = {
   value: number;
   unit: string;
@@ -229,8 +312,9 @@ export async function getPointcloudManifest(
   return response.json() as Promise<PotreeManifest>;
 }
 
-export async function getStressCloud(baseUrl: string, signal?: AbortSignal): Promise<StressCloud> {
-  const response = await fetch(`${baseUrl}/api/risk/base-stress-cloud`, { signal });
+export async function getStressCloud(baseUrl: string, taskId?: string, signal?: AbortSignal): Promise<StressCloud> {
+  const path = taskId ? `/api/risk/tasks/${taskId}/stress-cloud?case=base` : "/api/risk/base-stress-cloud";
+  const response = await fetch(`${baseUrl}${path}`, { signal });
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: string } | null;
@@ -238,6 +322,28 @@ export async function getStressCloud(baseUrl: string, signal?: AbortSignal): Pro
   }
 
   return response.json() as Promise<StressCloud>;
+}
+
+export async function getRiskTask(baseUrl: string, taskId: string): Promise<RiskTaskResponse> {
+  const response = await fetch(`${baseUrl}/api/risk/tasks/${taskId}`);
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `Failed to load risk task: ${response.status}`);
+  }
+
+  return response.json() as Promise<RiskTaskResponse>;
+}
+
+export async function getRiskResult(baseUrl: string, taskId: string): Promise<RiskResult> {
+  const response = await fetch(`${baseUrl}/api/risk/tasks/${taskId}/result`);
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `Failed to load risk result: ${response.status}`);
+  }
+
+  return response.json() as Promise<RiskResult>;
 }
 
 export async function submitPreprocessTask(

@@ -23,6 +23,7 @@ from app.services.preprocess import (
     get_preprocess_task,
     submit_preprocess_task,
 )
+from app.services.risk import RiskTaskNotFound, get_risk_result, get_risk_stress_h5_path, get_risk_task
 from app.services.stress_cloud import StressCloudError, get_stress_cloud_for_h5
 
 router = APIRouter()
@@ -63,6 +64,21 @@ class PreprocessTaskResponse(BaseModel):
     created_at: str
     updated_at: str
     message: str
+    result_url: str
+
+
+class RiskTaskResponse(BaseModel):
+    task_id: str
+    status: str
+    stage: str
+    stage_label: str
+    route_id: str
+    tower_type: str
+    inp_file: str
+    created_at: str
+    updated_at: str
+    message: str
+    progress: dict[str, int] = {}
     result_url: str
 
 
@@ -185,6 +201,33 @@ def preprocess_pointcloud_node(task_id: str, node_id: str) -> FileResponse:
 def base_stress_cloud() -> dict:
     try:
         return get_stress_cloud_for_h5(settings.base_stress_h5_path)
+    except StressCloudError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/api/risk/tasks/{task_id}", response_model=RiskTaskResponse, tags=["risk"])
+def risk_task_status(task_id: str) -> RiskTaskResponse:
+    try:
+        return RiskTaskResponse(**get_risk_task(task_id))
+    except RiskTaskNotFound as error:
+        raise HTTPException(status_code=404, detail="风险评估任务不存在") from error
+
+
+@router.get("/api/risk/tasks/{task_id}/result", tags=["risk"])
+def risk_task_result(task_id: str) -> dict:
+    try:
+        return get_risk_result(task_id)
+    except RiskTaskNotFound as error:
+        raise HTTPException(status_code=404, detail="风险评估结果不存在") from error
+
+
+@router.get("/api/risk/tasks/{task_id}/stress-cloud", tags=["risk"])
+def risk_task_stress_cloud(task_id: str, case: str = "base") -> dict:
+    try:
+        h5_path = get_risk_stress_h5_path(task_id, case)
+        return get_stress_cloud_for_h5(h5_path)
+    except RiskTaskNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
     except StressCloudError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

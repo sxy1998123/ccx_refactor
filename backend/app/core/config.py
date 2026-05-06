@@ -18,6 +18,13 @@ def _backend_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _pyinstaller_root() -> Path | None:
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if not bundle_root:
+        return None
+    return Path(bundle_root).resolve()
+
+
 def _database_path() -> Path:
     configured_path = os.getenv("CCX_DATABASE_PATH")
     if configured_path:
@@ -44,6 +51,50 @@ def _base_stress_h5_path() -> Path:
     )
 
 
+def _ccx_root() -> Path:
+    configured_path = os.getenv("CCX_SOLVER_ROOT")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    candidates = [
+        _backend_root() / "app" / "vendor" / "ccx",
+        _backend_root() / "vendor" / "ccx",
+        Path.cwd() / "app" / "vendor" / "ccx",
+        Path.cwd() / "vendor" / "ccx",
+    ]
+
+    bundle_root = _pyinstaller_root()
+    if bundle_root is not None:
+        candidates.extend(
+            [
+                bundle_root / "app" / "vendor" / "ccx",
+                bundle_root / "vendor" / "ccx",
+            ],
+        )
+
+    for candidate in candidates:
+        if (candidate / "core.py").exists() and (candidate / "ccx" / "ccx.exe").exists():
+            return candidate.resolve()
+
+    return candidates[0].resolve()
+
+
+def _ccx_results_dir() -> Path:
+    configured_path = os.getenv("CCX_RESULTS_DIR")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    return (_data_dir() / "risk").resolve()
+
+
+def _ccx_rainfall_data_dir() -> Path:
+    configured_path = os.getenv("CCX_RAINFALL_DATA_DIR")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    return (_ccx_root() / "数据").resolve()
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("CCX_APP_NAME", "CCX Analysis Backend")
@@ -55,6 +106,9 @@ class Settings:
     data_dir: Path = field(default_factory=_data_dir)
     database_path: Path = field(default_factory=_database_path)
     base_stress_h5_path: Path = field(default_factory=_base_stress_h5_path)
+    ccx_root: Path = field(default_factory=_ccx_root)
+    ccx_results_dir: Path = field(default_factory=_ccx_results_dir)
+    ccx_rainfall_data_dir: Path = field(default_factory=_ccx_rainfall_data_dir)
 
 
 settings = Settings()

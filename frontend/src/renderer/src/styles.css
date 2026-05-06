@@ -16,6 +16,11 @@ body {
   min-height: 720px;
 }
 
+html:has(.risk-page),
+body:has(.risk-page) {
+  overflow: hidden;
+}
+
 button,
 input {
   font: inherit;
@@ -168,7 +173,7 @@ button {
   align-items: center;
   justify-content: space-between;
   min-height: 132px;
-  padding: 28px 34px;
+  padding: 22px 34px;
   background: #ffffff;
   border-bottom: 1px solid #cddfdb;
 }
@@ -246,10 +251,21 @@ button {
   padding: 28px 34px 36px;
 }
 
+.content-stage:has(.risk-page) {
+  height: calc(100vh - 132px);
+  overflow: hidden;
+  padding: 16px 28px 18px;
+}
+
 .page-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 18px;
+  gap: 12px;
+}
+
+.risk-page {
+  height: 100%;
+  overflow: hidden;
 }
 
 .wide-panel,
@@ -731,15 +747,19 @@ button {
 
 .step-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-top: 18px;
 }
 
 .step-strip span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 42px;
   padding: 11px 12px;
-  color: #314441;
+  color: #6b7d79;
   background: #ffffff;
   border: 1px solid #bfd5d1;
   border-radius: 8px;
@@ -747,10 +767,37 @@ button {
   font-weight: 700;
 }
 
-.step-strip span:first-child {
+.step-strip span.done {
   color: #2f6f66;
   background: #e2f3f0;
   border-color: #88c4bc;
+}
+
+.step-strip span.active {
+  color: #155d73;
+  background: #e6f7fb;
+  border-color: #70bfd5;
+}
+
+.step-strip span.error {
+  color: #a74739;
+  background: #fff0ee;
+  border-color: #d8aaa3;
+}
+
+.step-strip span i {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: step-spin 720ms linear infinite;
+}
+
+@keyframes step-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .upload-tile {
@@ -877,6 +924,15 @@ button {
   grid-column: span 8;
 }
 
+.risk-page .stress-panel {
+  display: flex;
+  flex-direction: column;
+  grid-column: 1;
+  grid-row: 2 / 4;
+  min-height: 0;
+  padding: 16px;
+}
+
 .stress-cloud-viewer {
   position: relative;
   overflow: hidden;
@@ -885,6 +941,12 @@ button {
   background: #f7fbfa;
   border: 1px solid #ccd7d4;
   border-radius: 8px;
+}
+
+.risk-page .stress-cloud-viewer {
+  flex: 1;
+  height: auto;
+  min-height: 0;
 }
 
 .stress-cloud-viewport {
@@ -2502,9 +2564,31 @@ button {
   align-content: start;
 }
 
+.risk-dashboard {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  grid-template-rows: auto minmax(0, 220px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+.risk-page .risk-controls {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .factor-tile {
   min-height: 116px;
-  padding: 18px;
+  padding: 10px 18px;
+}
+
+.risk-page .factor-tile {
+  min-height: 82px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .factor-tile span,
@@ -2536,6 +2620,15 @@ button {
   align-items: center;
 }
 
+.risk-page .risk-result {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+  padding: 14px;
+  grid-template-columns: 112px 1fr;
+  gap: 14px;
+}
+
 .score-block {
   display: grid;
   width: 144px;
@@ -2545,6 +2638,11 @@ button {
   color: #ffffff;
   background: #c2675a;
   border-radius: 8px;
+}
+
+.risk-page .score-block {
+  width: 104px;
+  height: 104px;
 }
 
 .score-block span,
@@ -2568,6 +2666,66 @@ button {
   color: #263234;
   font-size: 17px;
   line-height: 1.8;
+}
+
+.risk-page .risk-result p {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.rainfall-risk-panel {
+  grid-column: 2;
+  grid-row: 3;
+  min-height: 0;
+  padding: 14px;
+}
+
+.compact-title {
+  margin-bottom: 10px;
+}
+
+.compact-title h2 {
+  font-size: 18px;
+}
+
+.rainfall-risk-table {
+  overflow: auto;
+  max-height: calc(100% - 58px);
+  border: 1px solid #cddfdb;
+  border-radius: 8px;
+}
+
+.rainfall-risk-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rainfall-risk-table th,
+.rainfall-risk-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #e1ece9;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rainfall-risk-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #263234;
+  background: #edf7fb;
+  font-weight: 800;
+}
+
+.rainfall-risk-table td {
+  color: #314441;
+}
+
+.rainfall-risk-table tr.danger td {
+  color: #a74739;
+  background: #fff0ee;
+  font-weight: 800;
 }
 
 @media (min-width: 1600px) {
@@ -3146,7 +3304,7 @@ button {
   }
 
   .content-stage:has(.analysis-overview-panel) {
-    padding: 12px 28px 14px;
+    padding: 12px 28px 8px;
   }
 }
 

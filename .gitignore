@@ -17,5 +17,8 @@ backend/dist/
 backend/*.spec
 backend/pointcloud_demo
 
+# ccx instance
+backend/app/vendor
+
 _ppt_extract/
 _pptx_extract/

@@ -10,6 +10,7 @@ from typing import Literal
 from app.core.config import settings
 from app.services.preprocess.geologic import process_geologic_env
 from app.services.preprocess.settlement import process_tower_txt
+from app.services.risk import start_risk_task
 
 TaskStatus = Literal["queued", "running", "completed", "failed"]
 
@@ -105,6 +106,7 @@ def _run_task(task_id: str, payload: dict, task_dir: Path) -> None:
             json.dumps(result, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        start_risk_task(task_id, result)
         _update_task(task_id, status="completed", message="预处理完成")
     except Exception as error:  # noqa: BLE001 - persisted task failure should include the concrete cause.
         failure = {

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElConfigProvider } from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
-import { getAppInfo, getPreprocessTask, type AppInfo, type PreprocessTaskResponse } from "./services/api";
+import { getAppInfo, getPreprocessTask, getRiskTask, type AppInfo, type PreprocessTaskResponse, type RiskTaskResponse } from "./services/api";
 import AnalysisView from "./views/AnalysisView.vue";
 import DatabaseView from "./views/DatabaseView.vue";
 import InputView from "./views/InputView.vue";
@@ -17,11 +17,14 @@ const activePage = ref<PageKey>("input");
 const hasAnalysisResult = ref(false);
 const hasRiskReport = ref(true);
 const preprocessTask = ref<PreprocessTaskResponse | null>(null);
+const riskTask = ref<RiskTaskResponse | null>(null);
 
 const PREPROCESS_TASK_STORAGE_KEY = "ccx.preprocessTask";
 const INPUT_FORM_STORAGE_KEY = "ccx.inputFormState";
 let preprocessPollTimer: number | undefined;
 let preprocessPollRunId = 0;
+let riskPollTimer: number | undefined;
+let riskPollRunId = 0;
 
 const pages: Array<{ key: PageKey; title: string; subtitle: string }> = [
   { key: "input", title: "输入数据", subtitle: "线路号、影像、SD 卡与点云文件" },
@@ -57,7 +60,7 @@ function setPreprocessTask(task: PreprocessTaskResponse): void {
   if (task.status === "completed") {
     hasAnalysisResult.value = true;
     hasRiskReport.value = true;
-    localStorage.removeItem(INPUT_FORM_STORAGE_KEY);
+    startRiskPolling(task.task_id);
   }
 }
 
@@ -145,6 +148,47 @@ function startPreprocessPolling(taskId: string): void {
   void poll();
 }
 
+function stopRiskPolling(): void {
+  riskPollRunId += 1;
+  if (riskPollTimer !== undefined) {
+    window.clearTimeout(riskPollTimer);
+    riskPollTimer = undefined;
+  }
+}
+
+function startRiskPolling(taskId: string): void {
+  stopRiskPolling();
+  const runId = riskPollRunId;
+
+  const poll = async (): Promise<void> => {
+    if (runId !== riskPollRunId || !apiBaseUrl.value) {
+      return;
+    }
+
+    try {
+      const task = await getRiskTask(apiBaseUrl.value, taskId);
+      if (runId !== riskPollRunId) {
+        return;
+      }
+      riskTask.value = task;
+      if (task.status === "completed") {
+        localStorage.removeItem(INPUT_FORM_STORAGE_KEY);
+        stopRiskPolling();
+        return;
+      }
+      if (task.status === "failed") {
+        stopRiskPolling();
+        return;
+      }
+      riskPollTimer = window.setTimeout(poll, 1500);
+    } catch {
+      riskPollTimer = window.setTimeout(poll, 1500);
+    }
+  };
+
+  void poll();
+}
+
 onMounted(async () => {
   const restoredTask = restorePreprocessTask();
   if (restoredTask) {
@@ -157,6 +201,8 @@ onMounted(async () => {
     appInfo.value = await getAppInfo(config.baseUrl);
     if (restoredTask?.status === "queued" || restoredTask?.status === "running") {
       startPreprocessPolling(restoredTask.task_id);
+    } else if (restoredTask?.status === "completed") {
+      startRiskPolling(restoredTask.task_id);
     }
     backendStatus.value = "已连接";
   } catch (error) {
@@ -167,6 +213,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopPreprocessPolling();
+  stopRiskPolling();
 });
 </script>
 
@@ -217,6 +264,7 @@ onBeforeUnmount(() => {
             :api-base-url="apiBaseUrl"
             :has-analysis-result="hasAnalysisResult"
             :preprocess-task="preprocessTask"
+            :risk-task="riskTask"
             @analysis-submitted="handleAnalysisSubmitted"
           />
           <AnalysisView
@@ -227,7 +275,13 @@ onBeforeUnmount(() => {
             @navigate="handleNavigate"
           />
           <DatabaseView v-else-if="activePage === 'database'" :api-base-url="apiBaseUrl" />
-          <RiskView v-else :api-base-url="apiBaseUrl" :has-risk-report="hasRiskReport" @navigate="handleNavigate" />
+          <RiskView
+            v-else
+            :api-base-url="apiBaseUrl"
+            :has-risk-report="hasRiskReport"
+            :preprocess-task-id="preprocessTaskId"
+            @navigate="handleNavigate"
+          />
         </section>
       </section>
     </main>
