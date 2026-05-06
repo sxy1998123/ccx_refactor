@@ -34,6 +34,16 @@ def _data_dir() -> Path:
     return (_backend_root() / "data").resolve()
 
 
+def _base_stress_h5_path() -> Path:
+    configured_path = os.getenv("CCX_BASE_STRESS_H5")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    return Path(
+        r"D:\Project2026\ccx_refactor_back\ccx(2)\results\codex_frontend_xyz_worst_h5py\Guxing_tower-m-9B-Pa_baseFE_C.h5",
+    )
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("CCX_APP_NAME", "CCX Analysis Backend")
@@ -44,6 +54,7 @@ class Settings:
     reload: bool = _env_bool("CCX_RELOAD", False)
     data_dir: Path = field(default_factory=_data_dir)
     database_path: Path = field(default_factory=_database_path)
+    base_stress_h5_path: Path = field(default_factory=_base_stress_h5_path)
 
 
 settings = Settings()

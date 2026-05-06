@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { getPreprocessTask, submitPreprocessTask } from "../services/api";
+import { computed, onMounted, ref, watch } from "vue";
+import { submitPreprocessTask, type PreprocessTaskResponse } from "../services/api";
 
 type TowerTxtKey = "tower1" | "tower2" | "tower3" | "tower4";
 
@@ -10,13 +10,26 @@ type TowerTypeOption = {
   inpFile: string;
 };
 
+type PersistedInputFormState = {
+  routeId: string;
+  towerType: string;
+  towerTxtFiles: Record<TowerTxtKey, string>;
+  envTxtFile: string;
+  imageFiles: string[];
+  pointCloudFiles: string[];
+  updatedAt: string;
+};
+
+const INPUT_FORM_STORAGE_KEY = "ccx.inputFormState";
+
 const props = defineProps<{
   apiBaseUrl: string;
   hasAnalysisResult: boolean;
+  preprocessTask: PreprocessTaskResponse | null;
 }>();
 
 const emit = defineEmits<{
-  analysisCompleted: [taskId: string];
+  analysisSubmitted: [task: PreprocessTaskResponse];
 }>();
 
 const towerTypes: TowerTypeOption[] = [
@@ -44,12 +57,126 @@ const envTxtFile = ref("");
 const imagePreviewUrl = ref("");
 const imageFiles = ref<string[]>([]);
 const pointCloudFiles = ref<string[]>([]);
-const isSubmittingAnalysis = ref(false);
+const isSubmittingRequest = ref(false);
 const analysisSubmitMessage = ref("");
 const analysisSubmitError = ref("");
+let isClearingPersistedForm = false;
 
 const selectedTowerType = computed(() => towerTypes.find((item) => item.value === towerType.value) ?? towerTypes[0]);
 const selectedTowerCount = computed(() => Object.values(towerTxtFiles.value).filter(Boolean).length);
+const isTaskRunning = computed(() => props.preprocessTask?.status === "queued" || props.preprocessTask?.status === "running");
+const shouldShowTaskState = computed(
+  () => props.preprocessTask?.status === "queued" || props.preprocessTask?.status === "running" || props.preprocessTask?.status === "failed",
+);
+const isSubmittingAnalysis = computed(() => isSubmittingRequest.value || isTaskRunning.value);
+const panelStatusLabel = computed(() => {
+  if (isSubmittingAnalysis.value) {
+    return "处理中";
+  }
+  if (props.preprocessTask?.status === "failed") {
+    return "失败";
+  }
+  return "未开始";
+});
+const taskStatusText = computed(() => {
+  if (analysisSubmitError.value) {
+    return analysisSubmitError.value;
+  }
+  if (shouldShowTaskState.value) {
+    return props.preprocessTask?.message || analysisSubmitMessage.value || "";
+  }
+  return analysisSubmitMessage.value;
+});
+const taskStatusHasError = computed(() => Boolean(analysisSubmitError.value) || props.preprocessTask?.status === "failed");
+const taskMetaItems = computed(() => {
+  if (!props.preprocessTask || !shouldShowTaskState.value) {
+    return [];
+  }
+
+  return [
+    `任务号：${props.preprocessTask.task_id}`,
+    `线路号：${props.preprocessTask.route_id || "--"}`,
+    `状态：${props.preprocessTask.status}`,
+  ];
+});
+
+function getCurrentFormState(): PersistedInputFormState {
+  return {
+    routeId: routeId.value,
+    towerType: towerType.value,
+    towerTxtFiles: { ...towerTxtFiles.value },
+    envTxtFile: envTxtFile.value,
+    imageFiles: [...imageFiles.value],
+    pointCloudFiles: [...pointCloudFiles.value],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function saveInputFormState(): void {
+  if (isClearingPersistedForm) {
+    return;
+  }
+
+  localStorage.setItem(INPUT_FORM_STORAGE_KEY, JSON.stringify(getCurrentFormState()));
+}
+
+function restoreInputFormState(): PersistedInputFormState | null {
+  const rawState = localStorage.getItem(INPUT_FORM_STORAGE_KEY);
+  if (!rawState) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(rawState) as PersistedInputFormState;
+  } catch (error) {
+    localStorage.removeItem(INPUT_FORM_STORAGE_KEY);
+    console.error(error);
+    return null;
+  }
+}
+
+async function applyInputFormState(state: PersistedInputFormState): Promise<void> {
+  routeId.value = state.routeId ?? "";
+  towerType.value = towerTypes.some((item) => item.value === state.towerType) ? state.towerType : towerTypes[0].value;
+  towerTxtFiles.value = {
+    tower1: state.towerTxtFiles?.tower1 ?? "",
+    tower2: state.towerTxtFiles?.tower2 ?? "",
+    tower3: state.towerTxtFiles?.tower3 ?? "",
+    tower4: state.towerTxtFiles?.tower4 ?? "",
+  };
+  envTxtFile.value = state.envTxtFile ?? "";
+  imageFiles.value = Array.isArray(state.imageFiles) ? state.imageFiles : [];
+  pointCloudFiles.value = Array.isArray(state.pointCloudFiles) ? state.pointCloudFiles : [];
+
+  if (imageFiles.value[0]) {
+    imagePreviewUrl.value = await window.ccx.createImagePreview(imageFiles.value[0]).catch(() => "");
+  }
+}
+
+function clearInputFormState(): void {
+  isClearingPersistedForm = true;
+  localStorage.removeItem(INPUT_FORM_STORAGE_KEY);
+  routeId.value = "";
+  towerType.value = towerTypes[0].value;
+  towerTxtFiles.value = {
+    tower1: "",
+    tower2: "",
+    tower3: "",
+    tower4: "",
+  };
+  envTxtFile.value = "";
+  imagePreviewUrl.value = "";
+  imageFiles.value = [];
+  pointCloudFiles.value = [];
+  analysisSubmitMessage.value = "";
+  analysisSubmitError.value = "";
+
+  window.setTimeout(() => {
+    isClearingPersistedForm = false;
+    localStorage.removeItem(INPUT_FORM_STORAGE_KEY);
+  }, 0);
+}
+
 function getFileName(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).at(-1) ?? filePath;
 }
@@ -185,7 +312,7 @@ async function handleSubmitPreprocess(): Promise<void> {
     return;
   }
 
-  isSubmittingAnalysis.value = true;
+  isSubmittingRequest.value = true;
   analysisSubmitError.value = "";
   analysisSubmitMessage.value = "预处理任务已提交，后端正在处理采集文件...";
 
@@ -200,28 +327,39 @@ async function handleSubmitPreprocess(): Promise<void> {
       point_cloud_files: pointCloudFiles.value,
     });
     analysisSubmitMessage.value = "预处理任务运行中，请等待...";
-    const completedTask = await waitForPreprocessTask(task.task_id);
-    if (completedTask.status === "failed") {
-      throw new Error(completedTask.message || "预处理任务失败");
-    }
-    analysisSubmitMessage.value = "预处理完成，正在进入数据分析页...";
-    emit("analysisCompleted", task.task_id);
+    saveInputFormState();
+    emit("analysisSubmitted", task);
   } catch (error) {
     analysisSubmitError.value = error instanceof Error ? error.message : String(error);
   } finally {
-    isSubmittingAnalysis.value = false;
+    isSubmittingRequest.value = false;
   }
 }
 
-async function waitForPreprocessTask(taskId: string) {
-  for (;;) {
-    const task = await getPreprocessTask(props.apiBaseUrl, taskId);
-    if (task.status === "completed" || task.status === "failed") {
-      return task;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 800));
+onMounted(() => {
+  const restoredState = restoreInputFormState();
+  if (restoredState) {
+    void applyInputFormState(restoredState);
   }
-}
+});
+
+watch(
+  [routeId, towerType, towerTxtFiles, envTxtFile, imageFiles, pointCloudFiles],
+  () => {
+    saveInputFormState();
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.preprocessTask?.status,
+  (status) => {
+    if (status === "completed") {
+      clearInputFormState();
+    }
+  },
+);
+
 </script>
 
 <template>
@@ -232,7 +370,7 @@ async function waitForPreprocessTask(taskId: string) {
           <span>采集批次</span>
           <h2>预处理数据导入</h2>
         </div>
-        <strong>{{ isSubmittingAnalysis ? "处理中" : hasAnalysisResult ? "已完成" : "未开始" }}</strong>
+        <strong>{{ panelStatusLabel }}</strong>
       </div>
 
       <div class="import-form preprocess-form">
@@ -342,8 +480,9 @@ async function waitForPreprocessTask(taskId: string) {
         </div>
 
         <div class="preprocess-actions">
-          <div v-if="analysisSubmitMessage || analysisSubmitError" class="task-status" :class="{ error: analysisSubmitError }">
-            <span>{{ analysisSubmitError || analysisSubmitMessage }}</span>
+          <div v-if="taskStatusText" class="task-status" :class="{ error: taskStatusHasError }">
+            <span>{{ taskStatusText }}</span>
+            <small v-for="item in taskMetaItems" :key="item">{{ item }}</small>
           </div>
           <button type="button" :disabled="isSubmittingAnalysis" @click="handleSubmitPreprocess">
             {{ isSubmittingAnalysis ? "请等待" : "开始预处理" }}
@@ -360,3 +499,4 @@ async function waitForPreprocessTask(taskId: string) {
     </div>
   </section>
 </template>
+

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElConfigProvider } from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
-import { getAppInfo, type AppInfo } from "./services/api";
+import { getAppInfo, getPreprocessTask, type AppInfo, type PreprocessTaskResponse } from "./services/api";
 import AnalysisView from "./views/AnalysisView.vue";
 import DatabaseView from "./views/DatabaseView.vue";
 import InputView from "./views/InputView.vue";
@@ -15,8 +15,13 @@ const backendStatus = ref("连接中");
 const appInfo = ref<AppInfo | null>(null);
 const activePage = ref<PageKey>("input");
 const hasAnalysisResult = ref(false);
-const hasRiskReport = ref(false);
-const preprocessTaskId = ref("");
+const hasRiskReport = ref(true);
+const preprocessTask = ref<PreprocessTaskResponse | null>(null);
+
+const PREPROCESS_TASK_STORAGE_KEY = "ccx.preprocessTask";
+const INPUT_FORM_STORAGE_KEY = "ccx.inputFormState";
+let preprocessPollTimer: number | undefined;
+let preprocessPollRunId = 0;
 
 const pages: Array<{ key: PageKey; title: string; subtitle: string }> = [
   { key: "input", title: "输入数据", subtitle: "线路号、影像、SD 卡与点云文件" },
@@ -26,28 +31,142 @@ const pages: Array<{ key: PageKey; title: string; subtitle: string }> = [
 ];
 
 const activePageMeta = computed(() => pages.find((page) => page.key === activePage.value) ?? pages[0]);
+const preprocessTaskId = computed(() => preprocessTask.value?.task_id ?? "");
 
 function handleNavigate(page: PageKey): void {
   activePage.value = page;
 }
 
-function handleAnalysisCompleted(taskId: string): void {
-  preprocessTaskId.value = taskId;
-  hasAnalysisResult.value = true;
-  hasRiskReport.value = true;
-  activePage.value = "analysis";
+function handleAnalysisSubmitted(task: PreprocessTaskResponse): void {
+  setPreprocessTask(task);
+  if (task.status === "queued" || task.status === "running") {
+    hasAnalysisResult.value = false;
+    startPreprocessPolling(task.task_id);
+    return;
+  }
+
+  if (task.status === "completed" && activePage.value === "input") {
+    activePage.value = "analysis";
+  }
+}
+
+function setPreprocessTask(task: PreprocessTaskResponse): void {
+  preprocessTask.value = task;
+  savePreprocessTask(task);
+
+  if (task.status === "completed") {
+    hasAnalysisResult.value = true;
+    hasRiskReport.value = true;
+    localStorage.removeItem(INPUT_FORM_STORAGE_KEY);
+  }
+}
+
+function savePreprocessTask(task: PreprocessTaskResponse): void {
+  localStorage.setItem(PREPROCESS_TASK_STORAGE_KEY, JSON.stringify(task));
+}
+
+function restorePreprocessTask(): PreprocessTaskResponse | null {
+  const rawTask = localStorage.getItem(PREPROCESS_TASK_STORAGE_KEY);
+  if (!rawTask) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(rawTask) as PreprocessTaskResponse;
+  } catch (error) {
+    localStorage.removeItem(PREPROCESS_TASK_STORAGE_KEY);
+    console.error(error);
+    return null;
+  }
+}
+
+function stopPreprocessPolling(): void {
+  preprocessPollRunId += 1;
+  if (preprocessPollTimer !== undefined) {
+    window.clearTimeout(preprocessPollTimer);
+    preprocessPollTimer = undefined;
+  }
+}
+
+function startPreprocessPolling(taskId: string): void {
+  stopPreprocessPolling();
+  const runId = preprocessPollRunId;
+
+  const poll = async (): Promise<void> => {
+    if (runId !== preprocessPollRunId) {
+      return;
+    }
+
+    if (!apiBaseUrl.value) {
+      preprocessPollTimer = window.setTimeout(poll, 800);
+      return;
+    }
+
+    try {
+      const task = await getPreprocessTask(apiBaseUrl.value, taskId);
+      if (runId !== preprocessPollRunId) {
+        return;
+      }
+
+      setPreprocessTask(task);
+
+      if (task.status === "completed") {
+        stopPreprocessPolling();
+        if (activePage.value === "input") {
+          activePage.value = "analysis";
+        }
+        return;
+      }
+
+      if (task.status === "failed") {
+        stopPreprocessPolling();
+        return;
+      }
+
+      preprocessPollTimer = window.setTimeout(poll, 800);
+    } catch (error) {
+      if (runId !== preprocessPollRunId) {
+        return;
+      }
+
+      const currentTask = preprocessTask.value;
+      if (currentTask?.task_id === taskId) {
+        setPreprocessTask({
+          ...currentTask,
+          status: "failed",
+          updated_at: new Date().toISOString(),
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      stopPreprocessPolling();
+    }
+  };
+
+  void poll();
 }
 
 onMounted(async () => {
+  const restoredTask = restorePreprocessTask();
+  if (restoredTask) {
+    setPreprocessTask(restoredTask);
+  }
+
   try {
     const config = await window.ccx.getApiConfig();
     apiBaseUrl.value = config.baseUrl;
     appInfo.value = await getAppInfo(config.baseUrl);
+    if (restoredTask?.status === "queued" || restoredTask?.status === "running") {
+      startPreprocessPolling(restoredTask.task_id);
+    }
     backendStatus.value = "已连接";
   } catch (error) {
     backendStatus.value = "连接失败";
     console.error(error);
   }
+});
+
+onBeforeUnmount(() => {
+  stopPreprocessPolling();
 });
 </script>
 
@@ -97,7 +216,8 @@ onMounted(async () => {
             v-if="activePage === 'input'"
             :api-base-url="apiBaseUrl"
             :has-analysis-result="hasAnalysisResult"
-            @analysis-completed="handleAnalysisCompleted"
+            :preprocess-task="preprocessTask"
+            @analysis-submitted="handleAnalysisSubmitted"
           />
           <AnalysisView
             v-else-if="activePage === 'analysis'"
@@ -107,7 +227,7 @@ onMounted(async () => {
             @navigate="handleNavigate"
           />
           <DatabaseView v-else-if="activePage === 'database'" :api-base-url="apiBaseUrl" />
-          <RiskView v-else :has-risk-report="hasRiskReport" @navigate="handleNavigate" />
+          <RiskView v-else :api-base-url="apiBaseUrl" :has-risk-report="hasRiskReport" @navigate="handleNavigate" />
         </section>
       </section>
     </main>

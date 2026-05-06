@@ -38,6 +38,28 @@ export type PotreeManifest = {
   totalVisiblePoints: number;
 };
 
+export type StressCloud = {
+  source: string;
+  unit: string;
+  nodes: Array<[number, number, number]>;
+  elements: Array<[number, number]>;
+  element_labels: number[];
+  stress: {
+    values: number[];
+    min: number;
+    max: number;
+  };
+  bounds: {
+    min: [number, number, number];
+    max: [number, number, number];
+  };
+  max_stress: {
+    value: number;
+    element_index: number;
+    element_label: number | null;
+  };
+};
+
 export type DemoAnalysisTaskResponse = {
   status: "completed";
   route_id: string;
@@ -205,6 +227,17 @@ export async function getPointcloudManifest(
   }
 
   return response.json() as Promise<PotreeManifest>;
+}
+
+export async function getStressCloud(baseUrl: string, signal?: AbortSignal): Promise<StressCloud> {
+  const response = await fetch(`${baseUrl}/api/risk/base-stress-cloud`, { signal });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `Failed to load stress cloud: ${response.status}`);
+  }
+
+  return response.json() as Promise<StressCloud>;
 }
 
 export async function submitPreprocessTask(

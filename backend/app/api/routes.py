@@ -23,6 +23,7 @@ from app.services.preprocess import (
     get_preprocess_task,
     submit_preprocess_task,
 )
+from app.services.stress_cloud import StressCloudError, get_stress_cloud_for_h5
 
 router = APIRouter()
 
@@ -180,9 +181,16 @@ def preprocess_pointcloud_node(task_id: str, node_id: str) -> FileResponse:
     return FileResponse(node_path, media_type="application/octet-stream")
 
 
+@router.get("/api/risk/base-stress-cloud", tags=["risk"])
+def base_stress_cloud() -> dict:
+    try:
+        return get_stress_cloud_for_h5(settings.base_stress_h5_path)
+    except StressCloudError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 def _first_point_cloud_path(result: dict) -> str:
     point_cloud_files = result.get("inputs", {}).get("point_cloud_files", [])
     if not point_cloud_files:
         raise PointCloudError("No point cloud file was submitted for this task")
     return str(point_cloud_files[0])
-

@@ -128,11 +128,21 @@ def _summarize_towers(tower_results: dict[str, dict]) -> dict:
     lat_values = []
     lon_values = []
     alt_values = []
+    drift_values_m = {"x": [], "y": [], "z": []}
+    drift_values_mm = {"x": [], "y": [], "z": []}
 
     for key, result in tower_results.items():
         imu = result.get("imu", {})
         gnss = result.get("gnss", {})
         total_drift = imu.get("total_drift_mm")
+        for axis in ("x", "y", "z"):
+            drift_m = imu.get(f"{axis}_drift_m")
+            drift_mm = imu.get(f"{axis}_drift_mm")
+            if drift_m is not None:
+                drift_values_m[axis].append(float(drift_m))
+            if drift_mm is not None:
+                drift_values_mm[axis].append(float(drift_mm))
+
         if total_drift is not None:
             drift_rows.append(
                 {
@@ -162,14 +172,14 @@ def _summarize_towers(tower_results: dict[str, dict]) -> dict:
         "max_drift_source": max_drift["file_name"] if max_drift else "",
         "max_drift_slot": max_drift["slot"] if max_drift else "",
         "ccx_displacement_m": {
-            "x": max_drift.get("x_drift_m") if max_drift else None,
-            "y": max_drift.get("y_drift_m") if max_drift else None,
-            "z": max_drift.get("z_drift_m") if max_drift else None,
+            "x": _mean_or_none(drift_values_m["x"]),
+            "y": _mean_or_none(drift_values_m["y"]),
+            "z": _mean_or_none(drift_values_m["z"]),
         },
         "ccx_displacement_mm": {
-            "x": max_drift.get("x_drift_mm") if max_drift else None,
-            "y": max_drift.get("y_drift_mm") if max_drift else None,
-            "z": max_drift.get("z_drift_mm") if max_drift else None,
+            "x": _mean_or_none(drift_values_mm["x"]),
+            "y": _mean_or_none(drift_values_mm["y"]),
+            "z": _mean_or_none(drift_values_mm["z"]),
         },
     }
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import towerStressPreview from "../assets/mock/tower-stress-cloud.jpeg";
+import StressCloudViewer from "../components/StressCloudViewer.vue";
 
 type PageKey = "input" | "analysis" | "database" | "risk";
 
 defineProps<{
+  apiBaseUrl: string;
   hasRiskReport: boolean;
 }>();
 
@@ -16,8 +17,8 @@ const riskPlaceholderItems = ["等待数据分析完成", "生成风险评估报
 const riskFactors = [
   { label: "杆塔种类", value: "耐张塔" },
   { label: "杆塔材料", value: "角钢" },
-  { label: "杆塔倾角", value: "2.8 deg" },
-  { label: "杆塔应力", value: "64.2 MPa" },
+  { label: "杆塔倾角", value: "0.0007 deg" },
+  { label: "base 最大应力", value: "53.42 MPa" },
 ];
 </script>
 
@@ -28,7 +29,7 @@ const riskFactors = [
         <div class="empty-copy">
           <span class="empty-eyebrow">等待报告</span>
           <h2>尚未生成风险评估报告</h2>
-          <p>风险评估需要先完成数据分析。生成报告后，这里会展示风险等级、风险指数、风险因子和处置建议。</p>
+          <p>风险评估需要先完成数据分析。生成报告后，这里会展示风险等级、风险指数、风险因素和处置建议。</p>
           <div class="empty-actions">
             <button type="button" class="primary-button" @click="emit('navigate', 'analysis')">查看数据分析</button>
             <button type="button" class="ghost-button" disabled>导出报告</button>
@@ -69,25 +70,25 @@ const riskFactors = [
         </article>
       </div>
 
-      <div class="visual-panel">
+      <div class="visual-panel stress-panel">
         <div class="panel-title">
           <div>
             <span>结构结果</span>
-            <h2>杆塔应力云图</h2>
+            <h2>base h5 应力云图</h2>
           </div>
-          <strong>中风险</strong>
+          <strong>Three.js</strong>
         </div>
-        <img :src="towerStressPreview" alt="杆塔应力云图" />
+        <StressCloudViewer :base-url="apiBaseUrl" />
       </div>
 
       <div class="wide-panel risk-result">
         <div class="score-block">
           <span>风险指数</span>
-          <strong>72</strong>
+          <strong>17</strong>
         </div>
         <p>
-          当前杆塔存在持续沉降与受力偏移叠加风险，塔基周边土体含水率变化会进一步放大结构倾斜和局部应力集中。
-          建议安排复核测量，重点检查塔基周边土体、拉线状态与横担连接点。根据演示模型推算，如果遇到 8 级及以上级别大风、暴雨级大雨，持续 2 天，将发生倒坍风险，应提前采取塔基加固、排水疏导和现场警戒措施。
+          当前 base 工况最大应力约 53.42 MPa，暂未超过 315 MPa 控制阈值。后续正式接入风险任务后，将根据
+          core.py 输出的 summary CSV 汇总降雨工况、首次超限天数、最大风险工况和 base h5 应力云图，生成完整评估结论。
         </p>
       </div>
     </template>
