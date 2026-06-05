@@ -1,20 +1,35 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { getStressCloud, type StressCloud } from "../services/api";
+
+type CloudMode = "stress" | "disp-x" | "disp-y" | "disp-z";
 
 const props = defineProps<{
   baseUrl: string;
   taskId?: string;
 }>();
 
+const cloudModes: Array<{ key: CloudMode; label: string; field: "stress" | "displacement"; axis: "magnitude" | "x" | "y" | "z" }> = [
+  { key: "stress", label: "应力", field: "stress", axis: "magnitude" },
+  { key: "disp-x", label: "X 位移", field: "displacement", axis: "x" },
+  { key: "disp-y", label: "Y 位移", field: "displacement", axis: "y" },
+  { key: "disp-z", label: "Z 位移", field: "displacement", axis: "z" },
+];
+
 const viewportRef = ref<HTMLDivElement | null>(null);
+const activeMode = ref<CloudMode>("stress");
 const statusText = ref("等待后端服务");
 const errorText = ref("");
 const elementCount = ref(0);
-const maxStressText = ref("--");
-const maxElementText = ref("--");
+const maxValueText = ref("--");
+const maxLocationText = ref("--");
+const legendMinText = ref("--");
+const legendMidText = ref("--");
+const legendMaxText = ref("--");
+
+const activeModeConfig = computed(() => cloudModes.find((mode) => mode.key === activeMode.value) ?? cloudModes[0]);
 
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
@@ -26,7 +41,7 @@ let animationFrame = 0;
 let abortController: AbortController | null = null;
 
 watch(
-  () => [props.baseUrl, props.taskId] as const,
+  () => [props.baseUrl, props.taskId, activeMode.value] as const,
   ([baseUrl, taskId]) => {
     if (!baseUrl) {
       statusText.value = "等待后端服务";
@@ -45,6 +60,7 @@ onBeforeUnmount(() => {
 async function loadStressCloud(baseUrl: string, taskId?: string): Promise<void> {
   abortController?.abort();
   abortController = new AbortController();
+  const mode = activeModeConfig.value;
   statusText.value = taskId ? "正在读取风险 h5" : "正在读取 base h5";
   errorText.value = "";
 
@@ -52,18 +68,21 @@ async function loadStressCloud(baseUrl: string, taskId?: string): Promise<void> 
   initializeScene();
 
   try {
-    const cloud = await getStressCloud(baseUrl, taskId, abortController.signal);
+    const cloud = await getStressCloud(baseUrl, taskId, mode.field, mode.axis, abortController.signal);
     renderCloud(cloud);
     elementCount.value = cloud.elements.length;
-    maxStressText.value = formatStress(cloud.max_stress.value);
-    maxElementText.value = cloud.max_stress.element_label ? String(cloud.max_stress.element_label) : "--";
-    statusText.value = "base 应力云图";
+    maxValueText.value = formatScalar(cloud.max_value.value, cloud.field.unit);
+    maxLocationText.value = cloud.max_value.label ? String(cloud.max_value.label) : "--";
+    legendMinText.value = formatScalar(cloud.field.min, cloud.field.unit);
+    legendMidText.value = formatScalar((cloud.field.min + cloud.field.max) / 2, cloud.field.unit);
+    legendMaxText.value = formatScalar(cloud.field.max, cloud.field.unit);
+    statusText.value = cloud.field.label;
   } catch (error) {
     if (abortController.signal.aborted) {
       return;
     }
     errorText.value = error instanceof Error ? error.message : String(error);
-    statusText.value = "应力云图加载失败";
+    statusText.value = "云图加载失败";
   }
 }
 
@@ -124,12 +143,15 @@ function renderCloud(cloud: StressCloud): void {
     const [startIndex, endIndex] = cloud.elements[index];
     const start = cloud.nodes[startIndex];
     const end = cloud.nodes[endIndex];
-    const stress = cloud.stress.values[index] ?? 0;
-    const color = stressToColor(stress, cloud.stress.min, cloud.stress.max);
+    const elementValue = cloud.field.values[index] ?? 0;
+    const startValue = cloud.field.location === "node" ? (cloud.field.values[startIndex] ?? 0) : elementValue;
+    const endValue = cloud.field.location === "node" ? (cloud.field.values[endIndex] ?? 0) : elementValue;
+    const startColor = scalarToColor(startValue, cloud.field.min, cloud.field.max);
+    const endColor = scalarToColor(endValue, cloud.field.min, cloud.field.max);
     writePosition(positions, index * 6, start, center);
     writePosition(positions, index * 6 + 3, end, center);
-    writeColor(colors, index * 6, color);
-    writeColor(colors, index * 6 + 3, color);
+    writeColor(colors, index * 6, startColor);
+    writeColor(colors, index * 6 + 3, endColor);
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -166,7 +188,7 @@ function writeColor(target: Float32Array, offset: number, color: THREE.Color): v
   target[offset + 2] = color.b;
 }
 
-function stressToColor(value: number, min: number, max: number): THREE.Color {
+function scalarToColor(value: number, min: number, max: number): THREE.Color {
   const t = max <= min ? 0 : Math.min(1, Math.max(0, (value - min) / (max - min)));
   const stops = [
     new THREE.Color("#2b6cb0"),
@@ -230,11 +252,21 @@ function disposeScene(): void {
   lineSegments = null;
 }
 
-function formatStress(value: number): string {
+function formatScalar(value: number, unit: string): string {
   if (!Number.isFinite(value)) {
     return "--";
   }
-  return `${(value / 1_000_000).toFixed(2)} MPa`;
+  if (unit === "Pa") {
+    return `${(value / 1_000_000).toFixed(2)} MPa`;
+  }
+  if (unit === "m") {
+    const absValue = Math.abs(value);
+    if (absValue >= 1) {
+      return `${value.toFixed(3)} m`;
+    }
+    return `${(value * 1000).toFixed(3)} mm`;
+  }
+  return `${value.toFixed(4)} ${unit}`;
 }
 </script>
 
@@ -242,16 +274,31 @@ function formatStress(value: number): string {
   <div class="stress-cloud-viewer">
     <div ref="viewportRef" class="stress-cloud-viewport"></div>
 
+    <div class="stress-cloud-tabs" role="tablist" aria-label="云图类型">
+      <button
+        v-for="mode in cloudModes"
+        :key="mode.key"
+        type="button"
+        :class="{ active: activeMode === mode.key }"
+        @click="activeMode = mode.key"
+      >
+        {{ mode.label }}
+      </button>
+    </div>
+
     <div class="stress-cloud-hud">
       <span>{{ statusText }}</span>
-      <strong>{{ maxStressText }}</strong>
-      <small>杆件 {{ elementCount }}，最大应力单元 {{ maxElementText }}</small>
+      <strong>{{ maxValueText }}</strong>
+      <small>杆件 {{ elementCount }}，{{ activeMode === "stress" ? "最大应力单元" : "最大绝对位移节点" }} {{ maxLocationText }}</small>
     </div>
 
     <div class="stress-cloud-legend">
-      <span>低</span>
-      <div></div>
-      <span>高</span>
+      <div class="legend-scale"></div>
+      <div class="legend-values">
+        <span>{{ legendMinText }}</span>
+        <span>{{ legendMidText }}</span>
+        <span>{{ legendMaxText }}</span>
+      </div>
     </div>
 
     <div v-if="errorText" class="stress-cloud-error">

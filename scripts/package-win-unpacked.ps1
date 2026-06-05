@@ -6,9 +6,6 @@ $frontend = Join-Path $root "frontend"
 $backendDist = Join-Path $backend "dist"
 $backendBuild = Join-Path $backend "build"
 $backendPackage = Join-Path $backendDist "backend"
-$backendPointCloudDemo = Join-Path $backend "pointcloud_demo"
-$packagedPointCloudDemo = Join-Path $backendPackage "pointcloud_demo"
-
 function Remove-WorkspaceItem([string]$PathToRemove) {
   if (-not (Test-Path -LiteralPath $PathToRemove)) {
     return
@@ -52,6 +49,7 @@ try {
     --name backend `
     --paths . `
     --add-data "app/db/schema.sql;app/db" `
+    --add-data "app/vendor/ccx;app/vendor/ccx" `
     --hidden-import app.main `
     --hidden-import uvicorn.loops.auto `
     --hidden-import uvicorn.protocols.http.auto `
@@ -63,15 +61,16 @@ finally {
   Pop-Location
 }
 
+# Ensure vendor/ccx is also available alongside backend.exe (not only inside _internal/)
+$backendVendorCcx = Join-Path $backend "app\vendor\ccx"
+$packagedVendorCcx = Join-Path $backendPackage "app\vendor\ccx"
+Remove-WorkspaceItem (Join-Path $backendPackage "app")
+New-Item -ItemType Directory -Path $packagedVendorCcx -Force | Out-Null
+Copy-Item -LiteralPath $backendVendorCcx -Destination $packagedVendorCcx\.. -Recurse -Force
+
 if (-not (Test-Path -LiteralPath (Join-Path $backendPackage "backend.exe"))) {
   throw "Backend executable was not generated: $backendPackage\backend.exe"
 }
-
-if (-not (Test-Path -LiteralPath $backendPointCloudDemo)) {
-  throw "Backend point cloud demo directory is missing: $backendPointCloudDemo"
-}
-
-Copy-Item -LiteralPath $backendPointCloudDemo -Destination $packagedPointCloudDemo -Recurse -Force
 
 Push-Location $frontend
 try {

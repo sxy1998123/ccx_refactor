@@ -961,6 +961,7 @@ button {
 }
 
 .stress-cloud-hud,
+.stress-cloud-tabs,
 .stress-cloud-legend,
 .stress-cloud-error {
   position: absolute;
@@ -968,6 +969,31 @@ button {
   background: rgba(251, 254, 253, 0.94);
   border: 1px solid rgba(200, 221, 217, 0.92);
   border-radius: 8px;
+}
+
+.stress-cloud-tabs {
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.stress-cloud-tabs button {
+  min-width: 58px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #385451;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.stress-cloud-tabs button.active {
+  background: #1f6f63;
+  color: #ffffff;
 }
 
 .stress-cloud-hud {
@@ -1006,19 +1032,27 @@ button {
   right: 14px;
   bottom: 14px;
   display: grid;
-  grid-template-columns: auto 160px auto;
-  gap: 8px;
-  align-items: center;
+  grid-template-columns: 190px;
+  gap: 6px;
   padding: 8px 10px;
   color: #314441;
   font-size: 12px;
   font-weight: 800;
 }
 
-.stress-cloud-legend div {
+.stress-cloud-legend .legend-scale {
   height: 10px;
   background: linear-gradient(90deg, #2b6cb0, #22c7a9, #f2c94c, #d94f45);
   border-radius: 8px;
+}
+
+.stress-cloud-legend .legend-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #1f2d2f;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
 }
 
 .stress-cloud-error {

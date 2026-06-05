@@ -24,7 +24,7 @@ from app.services.preprocess import (
     submit_preprocess_task,
 )
 from app.services.risk import RiskTaskNotFound, get_risk_result, get_risk_stress_h5_path, get_risk_task
-from app.services.stress_cloud import StressCloudError, get_stress_cloud_for_h5
+from app.services.stress_cloud import StressCloudError, get_field_cloud_for_h5
 
 router = APIRouter()
 
@@ -198,9 +198,9 @@ def preprocess_pointcloud_node(task_id: str, node_id: str) -> FileResponse:
 
 
 @router.get("/api/risk/base-stress-cloud", tags=["risk"])
-def base_stress_cloud() -> dict:
+def base_stress_cloud(field: str = "stress", axis: str = "magnitude") -> dict:
     try:
-        return get_stress_cloud_for_h5(settings.base_stress_h5_path)
+        return get_field_cloud_for_h5(settings.base_stress_h5_path, field, axis)
     except StressCloudError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -222,10 +222,10 @@ def risk_task_result(task_id: str) -> dict:
 
 
 @router.get("/api/risk/tasks/{task_id}/stress-cloud", tags=["risk"])
-def risk_task_stress_cloud(task_id: str, case: str = "base") -> dict:
+def risk_task_stress_cloud(task_id: str, case: str = "base", field: str = "stress", axis: str = "magnitude") -> dict:
     try:
         h5_path = get_risk_stress_h5_path(task_id, case)
-        return get_stress_cloud_for_h5(h5_path)
+        return get_field_cloud_for_h5(h5_path, field, axis)
     except RiskTaskNotFound as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except StressCloudError as error:

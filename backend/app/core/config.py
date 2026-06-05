@@ -56,13 +56,9 @@ def _ccx_root() -> Path:
     if configured_path:
         return Path(configured_path).expanduser().resolve()
 
-    candidates = [
-        _backend_root() / "app" / "vendor" / "ccx",
-        _backend_root() / "vendor" / "ccx",
-        Path.cwd() / "app" / "vendor" / "ccx",
-        Path.cwd() / "vendor" / "ccx",
-    ]
+    candidates: list[Path] = []
 
+    # 1) PyInstaller bundle: _MEIPASS / app/vendor/ccx (data copied by --add-data)
     bundle_root = _pyinstaller_root()
     if bundle_root is not None:
         candidates.extend(
@@ -72,11 +68,29 @@ def _ccx_root() -> Path:
             ],
         )
 
+    # 2) Relative to backend.exe (development / unpackaged)
+    candidates.extend(
+        [
+            _backend_root() / "app" / "vendor" / "ccx",
+            _backend_root() / "vendor" / "ccx",
+        ],
+    )
+
+    # 3) CWD fallback
+    candidates.extend(
+        [
+            Path.cwd() / "app" / "vendor" / "ccx",
+            Path.cwd() / "vendor" / "ccx",
+        ],
+    )
+
     for candidate in candidates:
         if (candidate / "core.py").exists() and (candidate / "ccx" / "ccx.exe").exists():
             return candidate.resolve()
 
-    return candidates[0].resolve()
+    if candidates:
+        return candidates[0].resolve()
+    return Path("app/vendor/ccx").resolve()
 
 
 def _ccx_results_dir() -> Path:

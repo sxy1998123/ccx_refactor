@@ -44,7 +44,19 @@ export type StressCloud = {
   nodes: Array<[number, number, number]>;
   elements: Array<[number, number]>;
   element_labels: number[];
-  stress: {
+  field: {
+    name: "stress" | "displacement";
+    axis: "magnitude" | "x" | "y" | "z";
+    label: string;
+    location: "element" | "node";
+    unit: string;
+    source_unit: string;
+    source_unit_factor: number;
+    values: number[];
+    min: number;
+    max: number;
+  };
+  stress?: {
     values: number[];
     min: number;
     max: number;
@@ -53,10 +65,16 @@ export type StressCloud = {
     min: [number, number, number];
     max: [number, number, number];
   };
-  max_stress: {
+  max_stress?: {
     value: number;
     element_index: number;
     element_label: number | null;
+  };
+  max_value: {
+    value: number;
+    index: number;
+    label: number | null;
+    location: "element" | "node";
   };
 };
 
@@ -312,8 +330,15 @@ export async function getPointcloudManifest(
   return response.json() as Promise<PotreeManifest>;
 }
 
-export async function getStressCloud(baseUrl: string, taskId?: string, signal?: AbortSignal): Promise<StressCloud> {
-  const path = taskId ? `/api/risk/tasks/${taskId}/stress-cloud?case=base` : "/api/risk/base-stress-cloud";
+export async function getStressCloud(
+  baseUrl: string,
+  taskId?: string,
+  field = "stress",
+  axis = "magnitude",
+  signal?: AbortSignal,
+): Promise<StressCloud> {
+  const params = new URLSearchParams({ field, axis });
+  const path = taskId ? `/api/risk/tasks/${taskId}/stress-cloud?case=base&${params}` : `/api/risk/base-stress-cloud?${params}`;
   const response = await fetch(`${baseUrl}${path}`, { signal });
 
   if (!response.ok) {
