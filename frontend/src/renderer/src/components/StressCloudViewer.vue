@@ -9,6 +9,7 @@ type CloudMode = "stress" | "disp-x" | "disp-y" | "disp-z";
 const props = defineProps<{
   baseUrl: string;
   taskId?: string;
+  caseName?: string;
 }>();
 
 const cloudModes: Array<{ key: CloudMode; label: string; field: "stress" | "displacement"; axis: "magnitude" | "x" | "y" | "z" }> = [
@@ -41,13 +42,13 @@ let animationFrame = 0;
 let abortController: AbortController | null = null;
 
 watch(
-  () => [props.baseUrl, props.taskId, activeMode.value] as const,
-  ([baseUrl, taskId]) => {
+  () => [props.baseUrl, props.taskId, props.caseName, activeMode.value] as const,
+  ([baseUrl, taskId, caseName]) => {
     if (!baseUrl) {
       statusText.value = "等待后端服务";
       return;
     }
-    void loadStressCloud(baseUrl, taskId);
+    void loadStressCloud(baseUrl, taskId, caseName || "base");
   },
   { immediate: true, flush: "post" },
 );
@@ -57,7 +58,7 @@ onBeforeUnmount(() => {
   disposeScene();
 });
 
-async function loadStressCloud(baseUrl: string, taskId?: string): Promise<void> {
+async function loadStressCloud(baseUrl: string, taskId: string | undefined, caseName: string): Promise<void> {
   abortController?.abort();
   abortController = new AbortController();
   const mode = activeModeConfig.value;
@@ -68,7 +69,7 @@ async function loadStressCloud(baseUrl: string, taskId?: string): Promise<void> 
   initializeScene();
 
   try {
-    const cloud = await getStressCloud(baseUrl, taskId, mode.field, mode.axis, abortController.signal);
+    const cloud = await getStressCloud(baseUrl, taskId, caseName, mode.field, mode.axis, abortController.signal);
     renderCloud(cloud);
     elementCount.value = cloud.elements.length;
     maxValueText.value = formatScalar(cloud.max_value.value, cloud.field.unit);

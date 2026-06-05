@@ -84,12 +84,22 @@ def get_risk_result(task_id: str) -> dict:
 
 def get_risk_stress_h5_path(task_id: str, case: str = "base") -> Path:
     result = get_risk_result(task_id)
-    if case != "base":
-        raise RiskTaskNotFound(f"Unsupported stress cloud case: {case}")
-    h5_path = result.get("base", {}).get("h5_path", "")
+    h5_path = ""
+    if case == "base":
+        h5_path = result.get("base", {}).get("h5_path", "")
+    else:
+        cases = result.get("full", {}).get("summary", {}).get("cases", [])
+        for item in cases:
+            if item.get("case") == case:
+                h5_path = item.get("h5_path", "")
+                break
     if not h5_path:
-        raise RiskTaskNotFound(f"Risk h5 not found for task: {task_id}")
-    return Path(h5_path)
+        raise RiskTaskNotFound(f"Risk h5 not found for task: {task_id}, case: {case}")
+
+    path = Path(h5_path)
+    if not path.exists():
+        raise RiskTaskNotFound(f"Risk h5 file not found: {path}")
+    return path
 
 
 def _run_task(task_id: str, preprocess_result: dict, task_dir: Path) -> None:

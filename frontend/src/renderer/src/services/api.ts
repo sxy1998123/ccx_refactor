@@ -333,12 +333,15 @@ export async function getPointcloudManifest(
 export async function getStressCloud(
   baseUrl: string,
   taskId?: string,
+  caseName = "base",
   field = "stress",
   axis = "magnitude",
   signal?: AbortSignal,
 ): Promise<StressCloud> {
   const params = new URLSearchParams({ field, axis });
-  const path = taskId ? `/api/risk/tasks/${taskId}/stress-cloud?case=base&${params}` : `/api/risk/base-stress-cloud?${params}`;
+  const path = taskId
+    ? `/api/risk/tasks/${taskId}/stress-cloud?case=${encodeURIComponent(caseName)}&${params}`
+    : `/api/risk/base-stress-cloud?${params}`;
   const response = await fetch(`${baseUrl}${path}`, { signal });
 
   if (!response.ok) {

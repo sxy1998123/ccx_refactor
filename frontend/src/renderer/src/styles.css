@@ -928,7 +928,7 @@ button {
   display: flex;
   flex-direction: column;
   grid-column: 1;
-  grid-row: 2 / 4;
+  grid-row: 3 / 5;
   min-height: 0;
   padding: 16px;
 }
@@ -2601,17 +2601,125 @@ button {
 .risk-dashboard {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr) 430px;
-  grid-template-rows: auto minmax(0, 220px) minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
   height: 100%;
+}
+
+.risk-case-sidebar {
+  grid-column: 1;
+  min-height: 0;
+  padding: 14px;
+}
+
+.risk-case-list {
+  display: grid;
+  gap: 8px;
+  max-height: calc(100% - 58px);
+  overflow: auto;
+}
+
+.risk-case-list button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cddfdb;
+  border-radius: 8px;
+  background: #f8fcfb;
+  color: #314441;
+  text-align: left;
+  cursor: pointer;
+}
+
+.risk-case-list button.active {
+  border-color: #1f6f63;
+  background: #e9f5f2;
+}
+
+.risk-case-list button.danger {
+  border-color: #e7b4ac;
+}
+
+.risk-case-list button span,
+.risk-case-list button strong,
+.risk-case-list button small {
+  display: block;
+}
+
+.risk-case-list button span {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.risk-case-list button strong {
+  color: #1f2d2f;
+  font-size: 13px;
+}
+
+.risk-case-list button small {
+  color: #5f7370;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.risk-case-main {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  grid-template-rows: auto auto minmax(0, 220px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
 }
 
 .risk-page .risk-controls {
   grid-column: 1 / -1;
   grid-row: 1;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.risk-day-selector {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: 12px 14px;
+}
+
+.risk-day-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.risk-day-buttons button {
+  display: grid;
+  min-width: 78px;
+  gap: 3px;
+  padding: 7px 10px;
+  border: 1px solid #cddfdb;
+  border-radius: 8px;
+  background: #f8fcfb;
+  color: #314441;
+  cursor: pointer;
+}
+
+.risk-day-buttons button.active {
+  border-color: #1f6f63;
+  background: #e9f5f2;
+}
+
+.risk-day-buttons button.danger {
+  border-color: #e7b4ac;
+  color: #a74739;
+}
+
+.risk-day-buttons span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.risk-day-buttons strong {
+  font-size: 13px;
 }
 
 .factor-tile {
@@ -2656,7 +2764,7 @@ button {
 
 .risk-page .risk-result {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 3;
   min-height: 0;
   padding: 14px;
   grid-template-columns: 112px 1fr;
@@ -2670,8 +2778,28 @@ button {
   place-items: center;
   justify-self: center;
   color: #ffffff;
-  background: #c2675a;
+  background: #5f7370;
   border-radius: 8px;
+}
+
+.score-block.low {
+  background: #2f8f68;
+}
+
+.score-block.watch {
+  background: #d0a13a;
+}
+
+.score-block.medium {
+  background: #d57a3a;
+}
+
+.score-block.high {
+  background: #c2675a;
+}
+
+.score-block.unknown {
+  background: #5f7370;
 }
 
 .risk-page .score-block {
@@ -2687,12 +2815,16 @@ button {
 .score-block span {
   align-self: end;
   font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .score-block strong {
   align-self: start;
-  font-size: 44px;
+  font-size: 34px;
   line-height: 1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .risk-result p {
@@ -2709,7 +2841,7 @@ button {
 
 .rainfall-risk-panel {
   grid-column: 2;
-  grid-row: 3;
+  grid-row: 4;
   min-height: 0;
   padding: 14px;
 }
