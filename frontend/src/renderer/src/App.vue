@@ -29,7 +29,7 @@ let riskPollRunId = 0;
 const pages: Array<{ key: PageKey; title: string; subtitle: string }> = [
   { key: "input", title: "输入数据", subtitle: "线路号、影像、SD 卡与点云文件" },
   { key: "analysis", title: "数据分析", subtitle: "位置、沉降、地表与点云结果" },
-  { key: "database", title: "数据库", subtitle: "杆塔表、地质表与字段说明" },
+  { key: "database", title: "数据库", subtitle: "查看历史地质灾害数据、结合历史数据对当前数据结果综合分析" },
   { key: "risk", title: "风险评估", subtitle: "杆塔参数、受力结果与处置建议" },
 ];
 

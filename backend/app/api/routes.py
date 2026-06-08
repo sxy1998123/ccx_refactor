@@ -74,6 +74,8 @@ class RiskTaskResponse(BaseModel):
     stage_label: str
     route_id: str
     tower_type: str
+    tower_shape: str = ""
+    material: str = ""
     inp_file: str
     created_at: str
     updated_at: str

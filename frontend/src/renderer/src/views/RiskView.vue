@@ -46,19 +46,8 @@ let riskPollRunId = 0;
 const hasRiskResult = computed(() => riskResult.value?.status === "completed");
 const isRiskRunning = computed(() => riskTask.value?.status === "queued" || riskTask.value?.status === "running");
 
-const towerTypeName = computed(() => {
-  const towerType = riskResult.value?.tower_type || riskTask.value?.tower_type;
-  if (towerType === "guxing") {
-    return "鼓型塔";
-  }
-  if (towerType === "jiubei") {
-    return "酒杯塔";
-  }
-  if (towerType === "maotouying") {
-    return "猫头鹰";
-  }
-  return towerType || "--";
-});
+const towerShape = computed(() => (riskResult.value?.tower_shape || riskTask.value?.tower_shape || "").trim());
+const towerMaterial = computed(() => (riskResult.value?.material || riskTask.value?.material || "").trim());
 
 const allRiskCases = computed<RiskCaseView[]>(() => {
   const base = riskResult.value?.base;
@@ -150,13 +139,19 @@ const selectedCase = computed(() => {
 
 const riskFactors = computed(() => {
   const current = selectedCase.value;
-  return [
-    { label: "杆塔种类", value: towerTypeName.value },
+  const factors = [
     { label: "当前工况", value: current?.label || "--" },
     { label: "风险等级", value: riskLevel(current?.riskIndex) },
     { label: "阈值占比", value: formatRiskPercent(current?.riskIndex) },
     { label: "最大应力", value: formatStress(current?.maxAbsStressPa) },
   ];
+  if (towerMaterial.value) {
+    factors.unshift({ label: "杆塔材质", value: towerMaterial.value });
+  }
+  if (towerShape.value) {
+    factors.unshift({ label: "杆塔种类", value: towerShape.value });
+  }
+  return factors;
 });
 
 const riskScore = computed(() => {

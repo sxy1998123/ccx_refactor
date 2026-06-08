@@ -28,6 +28,7 @@ def start_risk_task(task_id: str, preprocess_result: dict) -> dict:
 
     task_dir = _task_dir(task_id)
     task_dir.mkdir(parents=True, exist_ok=True)
+    tower_metadata = _tower_metadata(preprocess_result)
     task = {
         "task_id": task_id,
         "status": "queued",
@@ -35,6 +36,8 @@ def start_risk_task(task_id: str, preprocess_result: dict) -> dict:
         "stage_label": "等待执行有限元风险评估",
         "route_id": preprocess_result.get("route_id", ""),
         "tower_type": preprocess_result.get("tower_type", ""),
+        "tower_shape": tower_metadata.get("shape", ""),
+        "material": tower_metadata.get("material", ""),
         "inp_file": preprocess_result.get("inp_file", ""),
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
@@ -62,6 +65,8 @@ def get_risk_task(task_id: str) -> dict:
             "stage_label": result.get("stage_label", "风险评估完成"),
             "route_id": result.get("route_id", ""),
             "tower_type": result.get("tower_type", ""),
+            "tower_shape": result.get("tower_shape", ""),
+            "material": result.get("material", ""),
             "inp_file": result.get("inp_file", ""),
             "created_at": result.get("created_at", ""),
             "updated_at": result.get("completed_at", ""),
@@ -120,6 +125,7 @@ def _run_task(task_id: str, preprocess_result: dict, task_dir: Path) -> None:
         report = build_risk_report(base_result)
         if risk.get("summary"):
             report = build_risk_report(base_result, risk["summary"])
+        tower_metadata = _tower_metadata(preprocess_result)
         result = {
             "task_id": task_id,
             "status": "completed",
@@ -127,6 +133,8 @@ def _run_task(task_id: str, preprocess_result: dict, task_dir: Path) -> None:
             "message": "风险评估完成",
             "route_id": preprocess_result.get("route_id", ""),
             "tower_type": preprocess_result.get("tower_type", ""),
+            "tower_shape": tower_metadata.get("shape", ""),
+            "material": tower_metadata.get("material", ""),
             "inp_file": preprocess_result.get("inp_file", ""),
             "created_at": get_risk_task(task_id).get("created_at", ""),
             "completed_at": _now_iso(),
@@ -152,6 +160,7 @@ def _run_task(task_id: str, preprocess_result: dict, task_dir: Path) -> None:
             progress={"current": risk.get("case_count", 0), "total": risk.get("case_count", 0)},
         )
     except Exception as error:  # noqa: BLE001 - risk failure must be visible to the frontend.
+        tower_metadata = _tower_metadata(preprocess_result)
         failure = {
             "task_id": task_id,
             "status": "failed",
@@ -159,6 +168,8 @@ def _run_task(task_id: str, preprocess_result: dict, task_dir: Path) -> None:
             "message": str(error),
             "route_id": preprocess_result.get("route_id", ""),
             "tower_type": preprocess_result.get("tower_type", ""),
+            "tower_shape": tower_metadata.get("shape", ""),
+            "material": tower_metadata.get("material", ""),
             "inp_file": preprocess_result.get("inp_file", ""),
             "completed_at": _now_iso(),
         }
@@ -175,6 +186,19 @@ def _task_dir(task_id: str) -> Path:
 
 def _result_path(task_id: str) -> Path:
     return _task_dir(task_id) / "risk_result.json"
+
+
+def _tower_metadata(preprocess_result: dict) -> dict[str, str]:
+    metadata = preprocess_result.get("environment", {}).get("metadata", {})
+    if not isinstance(metadata, dict):
+        return {}
+
+    result = {}
+    for key in ("shape", "material"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            result[key] = value.strip()
+    return result
 
 
 def _ensure_rainfall_cases(result: dict) -> None:

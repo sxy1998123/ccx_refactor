@@ -22,3 +22,4 @@ backend/app/vendor
 
 _ppt_extract/
 _pptx_extract/
+backend/app/db/excel/data.xlsx

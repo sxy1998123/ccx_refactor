@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, net as electronNet, protocol } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, net as electronNet, protocol, shell } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -99,6 +99,32 @@ function getCcxSolverRoot(): string {
   }
 
   return path.join(process.resourcesPath, "backend", "app", "vendor", "ccx");
+}
+
+function getHazardDataWorkbookCandidates(): string[] {
+  if (isDev()) {
+    return [path.resolve(app.getAppPath(), "..", "backend", "app", "db", "excel", "data.xlsx")];
+  }
+
+  return [
+    path.join(process.resourcesPath, "backend", "app", "db", "excel", "data.xlsx"),
+    path.join(process.resourcesPath, "backend", "_internal", "app", "db", "excel", "data.xlsx"),
+  ];
+}
+
+async function openHazardDataWorkbook(): Promise<{ path: string }> {
+  const candidates = getHazardDataWorkbookCandidates();
+  const workbookPath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!workbookPath) {
+    throw new Error(`历史地质灾害数据文件不存在：${candidates[0]}`);
+  }
+
+  const openError = await shell.openPath(workbookPath);
+  if (openError) {
+    throw new Error(openError);
+  }
+
+  return { path: workbookPath };
 }
 
 function getFreePort(startPort: number): Promise<number> {
@@ -398,6 +424,9 @@ if (!gotLock) {
         }
 
         return createImagePreviewUrl(imagePath);
+      });
+      ipcMain.handle("ccx:open-hazard-data-workbook", async () => {
+        return openHazardDataWorkbook();
       });
       ipcMain.handle("ccx:select-tower-sd-directories", async () => {
         return selectInputFiles({

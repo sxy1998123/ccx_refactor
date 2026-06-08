@@ -60,6 +60,7 @@ const deletingRowid = ref<number | null>(null);
 const submitError = ref("");
 const selectedRecord = ref<DatabaseRecord | null>(null);
 const detailImagePreviews = ref<Record<string, string>>({});
+const isOpeningHazardData = ref(false);
 
 const activeTable = computed(() => tabs.find((tab) => tab.key === activeTab.value) ?? tabs[0]);
 const viewModeTitle = computed(() => {
@@ -330,6 +331,18 @@ async function handleSelectImageField(fieldName: string): Promise<void> {
   }
 }
 
+async function handleOpenHazardDataWorkbook(): Promise<void> {
+  isOpeningHazardData.value = true;
+  try {
+    await window.ccx.openHazardDataWorkbook();
+    // ElMessage.success("已调用系统打开历史地质灾害数据");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    isOpeningHazardData.value = false;
+  }
+}
+
 async function handleSubmitRecord(): Promise<void> {
   if (!props.apiBaseUrl) {
     submitError.value = "后端服务尚未连接，无法录入数据。";
@@ -441,6 +454,9 @@ watch(
 
           <ElSpace>
             <ElButton v-if="viewMode === 'list'" :loading="isLoadingRecords" @click="loadRecords">刷新列表</ElButton>
+            <ElButton v-if="viewMode === 'list'" :loading="isOpeningHazardData"  type="primary" @click="handleOpenHazardDataWorkbook">
+              查看历史地质灾害数据
+            </ElButton>
             <ElButton v-if="viewMode === 'list'" type="primary" @click="enterCreateMode">新增数据</ElButton>
             <ElButton v-else @click="returnToList">返回列表</ElButton>
           </ElSpace>

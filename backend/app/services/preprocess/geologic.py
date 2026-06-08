@@ -51,15 +51,46 @@ def _parse_line(line: str) -> tuple[datetime | None, dict[str, dict[str, float |
     return parsed_time, metrics
 
 
+def _parse_metadata_line(line: str) -> tuple[str, str] | None:
+    line = line.replace("\x00", " ").strip()
+    if not line:
+        return None
+
+    match = re.match(r'^(shape|material)\s*[:：]\s*["“”]?(.+?)["“”]?\s*$', line, re.IGNORECASE)
+    if not match:
+        return None
+
+    key = match.group(1).lower()
+    value = match.group(2).strip().strip('"“”')
+    return (key, value) if value else None
+
+
+def _decode_line(raw_line: bytes) -> str:
+    for encoding in ("utf-8", "gbk", "cp936"):
+        try:
+            return raw_line.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_line.decode("utf-8", errors="ignore")
+
+
 def process_geologic_env(env_txt_path: str | Path) -> dict:
     source_path = Path(env_txt_path)
     values_by_name: dict[str, list[float]] = defaultdict(list)
     series_by_name: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
     units_by_name: dict[str, str] = {}
     timestamps: list[datetime] = []
+    metadata: dict[str, str] = {}
 
-    with source_path.open("r", encoding="utf-8", errors="ignore") as file:
-        for line in file:
+    with source_path.open("rb") as file:
+        for raw_line in file:
+            line = _decode_line(raw_line)
+            metadata_item = _parse_metadata_line(line)
+            if metadata_item is not None:
+                key, value = metadata_item
+                metadata[key] = value
+                continue
+
             parsed_time, metrics = _parse_line(line)
             if parsed_time is None or parsed_time.year == 2000:
                 continue
@@ -91,6 +122,7 @@ def process_geologic_env(env_txt_path: str | Path) -> dict:
         "start_time": _format_time(min(timestamps)),
         "end_time": _format_time(max(timestamps)),
         "record_count": len(timestamps),
+        "metadata": metadata,
         "metrics": metrics_result,
     }
 

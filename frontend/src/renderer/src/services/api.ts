@@ -117,6 +117,8 @@ export type RiskTaskResponse = {
   stage_label: string;
   route_id: string;
   tower_type: string;
+  tower_shape?: string;
+  material?: string;
   inp_file: string;
   created_at: string;
   updated_at: string;
@@ -146,6 +148,8 @@ export type RiskResult = {
   message: string;
   route_id: string;
   tower_type: string;
+  tower_shape?: string;
+  material?: string;
   inp_file: string;
   created_at?: string;
   completed_at?: string;
@@ -251,6 +255,10 @@ export type PreprocessResult = {
     start_time: string;
     end_time: string;
     record_count: number;
+    metadata?: {
+      shape?: string;
+      material?: string;
+    };
     metrics: Record<string, PreprocessMetric>;
   };
   tower_results?: Record<string, PreprocessTowerResult>;

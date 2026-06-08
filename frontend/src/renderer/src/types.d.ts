@@ -19,6 +19,9 @@ interface Window {
       }>;
     }>;
     createImagePreview: (imagePath: string) => Promise<string>;
+    openHazardDataWorkbook: () => Promise<{
+      path: string;
+    }>;
     selectTowerSdDirectories: () => Promise<string[]>;
     selectGroundSdDirectory: () => Promise<string[]>;
     selectPointCloud: () => Promise<string[]>;

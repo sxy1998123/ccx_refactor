@@ -68,6 +68,16 @@ Remove-WorkspaceItem (Join-Path $backendPackage "app")
 New-Item -ItemType Directory -Path $packagedVendorCcx -Force | Out-Null
 Copy-Item -LiteralPath $backendVendorCcx -Destination $packagedVendorCcx\.. -Recurse -Force
 
+$backendHazardWorkbook = Join-Path $backend "app\db\excel\data.xlsx"
+if (Test-Path -LiteralPath $backendHazardWorkbook) {
+  $packagedHazardWorkbookDir = Join-Path $backendPackage "app\db\excel"
+  New-Item -ItemType Directory -Path $packagedHazardWorkbookDir -Force | Out-Null
+  Copy-Item -LiteralPath $backendHazardWorkbook -Destination $packagedHazardWorkbookDir -Force
+}
+else {
+  Write-Warning "Historical hazard workbook was not found and will not be packaged: $backendHazardWorkbook"
+}
+
 if (-not (Test-Path -LiteralPath (Join-Path $backendPackage "backend.exe"))) {
   throw "Backend executable was not generated: $backendPackage\backend.exe"
 }
