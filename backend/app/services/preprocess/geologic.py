@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+MAX_SERIES_POINTS = 2000
 
 
 def _parse_utc_time(time_text: str) -> datetime:
@@ -52,6 +54,7 @@ def _parse_line(line: str) -> tuple[datetime | None, dict[str, dict[str, float |
 def process_geologic_env(env_txt_path: str | Path) -> dict:
     source_path = Path(env_txt_path)
     values_by_name: dict[str, list[float]] = defaultdict(list)
+    series_by_name: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
     units_by_name: dict[str, str] = {}
     timestamps: list[datetime] = []
 
@@ -63,7 +66,9 @@ def process_geologic_env(env_txt_path: str | Path) -> dict:
 
             timestamps.append(parsed_time)
             for name, info in metrics.items():
-                values_by_name[name].append(float(info["value"]))
+                value = float(info["value"])
+                values_by_name[name].append(value)
+                series_by_name[name].append((parsed_time, value))
                 units_by_name.setdefault(name, str(info["unit"]))
 
     if not timestamps:
@@ -78,6 +83,7 @@ def process_geologic_env(env_txt_path: str | Path) -> dict:
             "value": sum(values) / len(values),
             "unit": units_by_name.get(name, ""),
             "count": len(values),
+            "series": _downsample_time_series(series_by_name[name], MAX_SERIES_POINTS),
         }
 
     return {
@@ -87,3 +93,39 @@ def process_geologic_env(env_txt_path: str | Path) -> dict:
         "record_count": len(timestamps),
         "metrics": metrics_result,
     }
+
+
+def _downsample_time_series(points: list[tuple[datetime, float]], max_points: int) -> list[dict[str, float | str]]:
+    if not points:
+        return []
+
+    points.sort(key=lambda item: item[0])
+    if len(points) <= max_points:
+        return [{"time": _format_time(time), "value": value} for time, value in points]
+
+    buckets = [
+        {"time_sum": 0.0, "value_sum": 0.0, "count": 0}
+        for _ in range(max_points)
+    ]
+    base_time = points[0][0]
+    total = len(points)
+    for index, (time, value) in enumerate(points):
+        bucket_index = min(max_points - 1, index * max_points // total)
+        bucket = buckets[bucket_index]
+        bucket["time_sum"] += (time - base_time).total_seconds()
+        bucket["value_sum"] += value
+        bucket["count"] += 1
+
+    result = []
+    for bucket in buckets:
+        count = bucket["count"]
+        if not count:
+            continue
+        seconds = bucket["time_sum"] / count
+        result.append(
+            {
+                "time": _format_time(base_time + timedelta(seconds=seconds)),
+                "value": bucket["value_sum"] / count,
+            }
+        )
+    return result

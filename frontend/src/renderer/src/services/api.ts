@@ -195,6 +195,10 @@ export type PreprocessMetric = {
   value: number;
   unit: string;
   count?: number;
+  series?: Array<{
+    time: string;
+    value: number;
+  }>;
 };
 
 export type PreprocessTowerResult = {
@@ -218,6 +222,14 @@ export type PreprocessTowerResult = {
     y_drift_mm: number | null;
     z_drift_mm: number | null;
     total_drift_mm: number | null;
+    series?: Array<{
+      time: string;
+      elapsed_seconds: number;
+      x_mm: number;
+      y_mm: number;
+      z_mm: number;
+      total_mm: number;
+    }>;
   };
 };
 

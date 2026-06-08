@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import InteractiveLineChart from "../components/InteractiveLineChart.vue";
 import PointCloudViewer from "../components/PointCloudViewer.vue";
 import { getPreprocessResult, type PreprocessResult } from "../services/api";
 
@@ -21,6 +22,8 @@ const resultError = ref("");
 const isLoadingResult = ref(false);
 const isImageDialogOpen = ref(false);
 const isPointCloudDialogOpen = ref(false);
+const selectedEnvironmentMetricKey = ref("");
+const selectedTowerSlot = ref("");
 
 const analysisPlaceholderSteps = ["输入线路编号", "选择 TXT、图片和点云文件", "点击开始预处理", "生成数据分析结果"];
 
@@ -70,6 +73,32 @@ const environmentMetrics = computed(() => {
     .map(([key, label]) => [label, formatMetric(metrics[key].value, metrics[key].unit)] as [string, string]);
 });
 
+const environmentMetricOptions = computed(() => {
+  const metrics = preprocessResult.value?.environment?.metrics;
+  if (!metrics) {
+    return [];
+  }
+  return Object.entries(metrics).map(([key, metric]) => ({
+    key,
+    label: environmentNameMap[key] ?? key,
+    unit: metric.unit,
+    count: metric.count ?? metric.series?.length ?? 0,
+  }));
+});
+
+const selectedEnvironmentMetric = computed(() => {
+  const key = selectedEnvironmentMetricKey.value || environmentMetricOptions.value[0]?.key || "";
+  const metric = key ? preprocessResult.value?.environment?.metrics?.[key] : undefined;
+  return metric
+    ? {
+        key,
+        label: environmentNameMap[key] ?? key,
+        unit: metric.unit,
+        series: metric.series ?? [],
+      }
+    : null;
+});
+
 const gnssMetrics = computed(() => {
   const summary = preprocessResult.value?.tower_summary;
   return [
@@ -114,6 +143,57 @@ const towerRows = computed(() => {
   }));
 });
 
+const towerOptions = computed(() =>
+  Object.entries(preprocessResult.value?.tower_results ?? {}).map(([slot, result]) => ({
+    slot,
+    label: `${slot} · ${result.file_name}`,
+  })),
+);
+
+const selectedTowerResult = computed(() => {
+  const slot = selectedTowerSlot.value || towerOptions.value[0]?.slot || "";
+  const result = slot ? preprocessResult.value?.tower_results?.[slot] : undefined;
+  return result ? { slot, result } : null;
+});
+
+const environmentChart = computed(() => {
+  const metric = selectedEnvironmentMetric.value;
+  const points = metric?.series ?? [];
+  return {
+    hasData: points.length > 1,
+    label: metric?.label ?? "--",
+    unit: metric?.unit ?? "",
+    series: [
+      {
+        name: metric?.label ?? "环境指标",
+        color: "#2f6f66",
+        data: points.map((item) => [item.time, item.value] as [string, number]),
+      },
+    ],
+  };
+});
+
+const towerChart = computed(() => {
+  const series = selectedTowerResult.value?.result.imu.series ?? [];
+  const lines = [
+    { key: "x_mm", label: "X 位移", color: "#2b6cb0", values: series.map((item) => item.x_mm) },
+    { key: "y_mm", label: "Y 位移", color: "#22a087", values: series.map((item) => item.y_mm) },
+    { key: "z_mm", label: "Z 位移", color: "#d0a13a", values: series.map((item) => item.z_mm) },
+    { key: "total_mm", label: "总沉降", color: "#c2675a", values: series.map((item) => item.total_mm) },
+  ];
+  const allValues = lines.flatMap((line) => line.values).filter((value) => Number.isFinite(value));
+  const range = valueRange(allValues);
+  return {
+    hasData: series.length > 1,
+    min: range.min,
+    max: range.max,
+    lines: lines.map((line) => ({
+      ...line,
+      data: series.map((item, index) => [item.time, line.values[index] ?? 0] as [string, number]),
+    })),
+  };
+});
+
 const overviewCards = computed(() => {
   const result = preprocessResult.value;
   const summary = result?.tower_summary;
@@ -151,6 +231,38 @@ function getFileName(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).at(-1) ?? filePath;
 }
 
+function valueRange(values: number[]): { min: number; max: number } {
+  if (!values.length) {
+    return { min: 0, max: 1 };
+  }
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  return { min, max };
+}
+
+function formatChartValue(value: number, unit = ""): string {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return `${value.toFixed(Math.abs(value) >= 100 ? 1 : 3)}${unit ? ` ${unit}` : ""}`;
+}
+
+function applyChartDefaults(): void {
+  const metricKeys = Object.keys(preprocessResult.value?.environment?.metrics ?? {});
+  if (!selectedEnvironmentMetricKey.value || !metricKeys.includes(selectedEnvironmentMetricKey.value)) {
+    selectedEnvironmentMetricKey.value = metricKeys[0] ?? "";
+  }
+
+  const towerSlots = Object.keys(preprocessResult.value?.tower_results ?? {});
+  if (!selectedTowerSlot.value || !towerSlots.includes(selectedTowerSlot.value)) {
+    selectedTowerSlot.value = towerSlots[0] ?? "";
+  }
+}
+
 async function loadResult(): Promise<void> {
   if (!props.apiBaseUrl || !props.preprocessTaskId) {
     return;
@@ -161,6 +273,7 @@ async function loadResult(): Promise<void> {
   try {
     const result = await getPreprocessResult(props.apiBaseUrl, props.preprocessTaskId);
     preprocessResult.value = result;
+    applyChartDefaults();
     await loadImagePreviews(result.inputs?.image_files ?? []);
   } catch (error) {
     resultError.value = error instanceof Error ? error.message : String(error);
@@ -307,6 +420,47 @@ watch(() => [props.apiBaseUrl, props.preprocessTaskId], loadResult);
               <span>{{ row.z }}</span>
             </div>
           </div>
+        </section>
+      </div>
+
+      <div class="wide-panel analysis-chart-panel">
+        <section class="analysis-chart-card">
+          <div class="compact-section-title">
+            <span>环境采样曲线</span>
+            <select v-model="selectedEnvironmentMetricKey" class="analysis-chart-select" aria-label="选择环境采样指标">
+              <option v-for="option in environmentMetricOptions" :key="option.key" :value="option.key">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="analysis-chart-meta">
+            <strong>{{ environmentChart.label }}</strong>
+          </div>
+          <InteractiveLineChart
+            :series="environmentChart.series"
+            :y-unit="environmentChart.unit"
+            empty-text="当前结果未包含环境采样曲线，重新预处理后可生成最多 2000 个平均采样点。"
+          />
+        </section>
+
+        <section class="analysis-chart-card">
+          <div class="compact-section-title">
+            <span>塔基位移与沉降曲线</span>
+            <select v-model="selectedTowerSlot" class="analysis-chart-select" aria-label="选择塔基文件">
+              <option v-for="option in towerOptions" :key="option.slot" :value="option.slot">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="analysis-chart-meta">
+            <strong>{{ selectedTowerResult?.result.file_name || "--" }}</strong>
+            <span>{{ formatChartValue(towerChart.min, "mm") }} - {{ formatChartValue(towerChart.max, "mm") }}</span>
+          </div>
+          <InteractiveLineChart
+            :series="towerChart.lines.map((line) => ({ name: line.label, color: line.color, data: line.data }))"
+            y-unit="mm"
+            empty-text="当前结果未包含塔基位移曲线，重新预处理后可生成最多 2000 个平均采样点。"
+          />
         </section>
       </div>
 

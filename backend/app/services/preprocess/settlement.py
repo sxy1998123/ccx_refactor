@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+
+MAX_SERIES_POINTS = 2000
 
 
 IMU_PATTERN = re.compile(
@@ -72,8 +74,8 @@ def _detect_target_date(file_path: Path) -> str | None:
 
 def process_tower_txt(file_path: str | Path) -> dict:
     source_path = Path(file_path)
-    target_date = _detect_target_date(source_path)
-    if target_date is None:
+    first_valid_date = _detect_target_date(source_path)
+    if first_valid_date is None:
         raise ValueError(f"No valid target date found in {source_path}")
 
     gnss_records = []
@@ -86,11 +88,11 @@ def process_tower_txt(file_path: str | Path) -> dict:
             rmc_match = RMC_PATTERN.match(line)
             if rmc_match:
                 date_text = rmc_match.group(1)
-                current_rmc_date = date_text if date_text == target_date else None
+                current_rmc_date = date_text if not date_text.startswith("2000-00-00") else None
                 continue
 
             if GGA_PATTERN.match(line):
-                if current_rmc_date != target_date:
+                if current_rmc_date is None:
                     continue
                 gga = _parse_gga(line)
                 if gga is not None:
@@ -98,7 +100,7 @@ def process_tower_txt(file_path: str | Path) -> dict:
                 continue
 
             imu_match = IMU_PATTERN.match(line)
-            if not imu_match or imu_match.group(1) != target_date:
+            if not imu_match or imu_match.group(1).startswith("2000-00-00"):
                 continue
 
             try:
@@ -117,6 +119,7 @@ def process_tower_txt(file_path: str | Path) -> dict:
 
     gnss = _summarize_gnss(gnss_records)
     imu = _summarize_imu(imu_records)
+    target_date = _format_date_range(imu_records, first_valid_date)
     return {
         "source_file": str(source_path),
         "file_name": source_path.name,
@@ -124,6 +127,15 @@ def process_tower_txt(file_path: str | Path) -> dict:
         "gnss": gnss,
         "imu": imu,
     }
+
+
+def _format_date_range(records: list[dict], fallback_date: str) -> str:
+    if not records:
+        return fallback_date
+    dates = sorted({item["t"].date().isoformat() for item in records})
+    if len(dates) == 1:
+        return dates[0]
+    return f"{dates[0]} 至 {dates[-1]}"
 
 
 def _summarize_gnss(records: list[dict]) -> dict:
@@ -151,6 +163,7 @@ def _summarize_imu(records: list[dict]) -> dict:
         return {
             "valid_data_count": len(records),
             "duration_minutes": 0.0,
+            "series": [],
             "x_drift_mm": None,
             "y_drift_mm": None,
             "z_drift_mm": None,
@@ -169,24 +182,28 @@ def _summarize_imu(records: list[dict]) -> dict:
     current_bias = np.mean(np.array(static_samples, dtype=float), axis=0)
     velocity = np.zeros(3, dtype=float)
     position = np.zeros(3, dtype=float)
+    series_buckets = _create_series_buckets(min(MAX_SERIES_POINTS, len(records) - 1))
 
     bias_alpha = 0.999
     velocity_leak = 0.995
     position_leak = 0.999
     valid_data_count = 0
 
-    for item in records[1:]:
+    total_steps = len(records) - 1
+    for step_index, item in enumerate(records[1:]):
         current_bias = bias_alpha * current_bias + (1.0 - bias_alpha) * item["acc"]
         residual_acc = item["acc"] - current_bias
         velocity = (velocity + residual_acc * delta_time) * velocity_leak
         position = (position + velocity * delta_time) * position_leak
         valid_data_count += 1
+        _add_series_sample(series_buckets, step_index, total_steps, start_time, item["t"], position * 0.01)
 
     position = position * 0.01
     total_drift_m = float(np.linalg.norm(position))
     return {
         "valid_data_count": valid_data_count,
         "duration_minutes": valid_data_count / sample_rate / 60,
+        "series": _finalize_series_buckets(series_buckets, start_time),
         "x_drift_m": float(position[0]),
         "y_drift_m": float(position[1]),
         "z_drift_m": float(position[2]),
@@ -196,3 +213,59 @@ def _summarize_imu(records: list[dict]) -> dict:
         "z_drift_mm": float(position[2] * 1000),
         "total_drift_mm": total_drift_m * 1000,
     }
+
+
+def _create_series_buckets(count: int) -> list[dict[str, float | int]]:
+    return [
+        {
+            "time_sum": 0.0,
+            "x_sum": 0.0,
+            "y_sum": 0.0,
+            "z_sum": 0.0,
+            "total_sum": 0.0,
+            "count": 0,
+        }
+        for _ in range(max(count, 1))
+    ]
+
+
+def _add_series_sample(
+    buckets: list[dict[str, float | int]],
+    step_index: int,
+    total_steps: int,
+    start_time: datetime,
+    timestamp: datetime,
+    position_m: np.ndarray,
+) -> None:
+    bucket_index = min(len(buckets) - 1, step_index * len(buckets) // max(total_steps, 1))
+    bucket = buckets[bucket_index]
+    x_mm = float(position_m[0] * 1000)
+    y_mm = float(position_m[1] * 1000)
+    z_mm = float(position_m[2] * 1000)
+    bucket["time_sum"] = float(bucket["time_sum"]) + (timestamp - start_time).total_seconds()
+    bucket["x_sum"] = float(bucket["x_sum"]) + x_mm
+    bucket["y_sum"] = float(bucket["y_sum"]) + y_mm
+    bucket["z_sum"] = float(bucket["z_sum"]) + z_mm
+    bucket["total_sum"] = float(bucket["total_sum"]) + float(np.linalg.norm(position_m) * 1000)
+    bucket["count"] = int(bucket["count"]) + 1
+
+
+def _finalize_series_buckets(buckets: list[dict[str, float | int]], start_time: datetime) -> list[dict[str, float | str]]:
+    result = []
+    for bucket in buckets:
+        count = int(bucket["count"])
+        if not count:
+            continue
+        seconds = float(bucket["time_sum"]) / count
+        timestamp = start_time + timedelta(seconds=seconds)
+        result.append(
+            {
+                "time": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "elapsed_seconds": seconds,
+                "x_mm": float(bucket["x_sum"]) / count,
+                "y_mm": float(bucket["y_sum"]) / count,
+                "z_mm": float(bucket["z_sum"]) / count,
+                "total_mm": float(bucket["total_sum"]) / count,
+            }
+        )
+    return result
