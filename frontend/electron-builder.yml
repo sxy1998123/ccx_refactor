@@ -1,5 +1,5 @@
 appId: com.ccx.analysis
-productName: CCX Analysis
+productName: 杆塔失稳风险快速评估系统
 directories:
   output: dist
 files:

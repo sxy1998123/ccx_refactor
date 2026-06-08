@@ -22,10 +22,12 @@ import {
   createDatabaseRecord,
   deleteDatabaseRecord,
   getDatabaseSchema,
+  getPreprocessResult,
   listDatabaseRecords,
   type DatabaseField,
   type DatabaseRecord,
   type DatabaseSchema,
+  type HazardMetricsSummary,
 } from "../services/api";
 
 type DatabaseTabKey = "towers" | "geology_records";
@@ -37,6 +39,7 @@ const EXAMPLE_FIELDS = ["example1", "example2", "example3", "example4", "example
 
 const props = defineProps<{
   apiBaseUrl: string;
+  preprocessTaskId: string;
 }>();
 
 const tabs: Array<{ key: DatabaseTabKey; label: string; description: string }> = [
@@ -61,6 +64,9 @@ const submitError = ref("");
 const selectedRecord = ref<DatabaseRecord | null>(null);
 const detailImagePreviews = ref<Record<string, string>>({});
 const isOpeningHazardData = ref(false);
+const hazardMetrics = ref<HazardMetricsSummary | null>(null);
+const isLoadingHazardMetrics = ref(false);
+const hazardMetricsError = ref("");
 
 const activeTable = computed(() => tabs.find((tab) => tab.key === activeTab.value) ?? tabs[0]);
 const viewModeTitle = computed(() => {
@@ -86,6 +92,8 @@ const selectedExamplePaths = computed(() =>
 const detailImageCount = computed(() =>
   detailImageFields.value.filter((field) => hasRecordValue(selectedRecord.value, field.name)).length,
 );
+const hazardMetricRows = computed(() => hazardMetrics.value?.overall ?? []);
+const hasHazardMetrics = computed(() => Boolean(hazardMetrics.value?.available && hazardMetricRows.value.length));
 
 async function loadSchema(): Promise<void> {
   if (!props.apiBaseUrl) {
@@ -121,6 +129,27 @@ async function loadRecords(): Promise<void> {
     recordsError.value = error instanceof Error ? error.message : String(error);
   } finally {
     isLoadingRecords.value = false;
+  }
+}
+
+async function loadHazardMetrics(): Promise<void> {
+  hazardMetrics.value = null;
+  hazardMetricsError.value = "";
+  if (!props.apiBaseUrl || !props.preprocessTaskId) {
+    return;
+  }
+
+  isLoadingHazardMetrics.value = true;
+  try {
+    const result = await getPreprocessResult(props.apiBaseUrl, props.preprocessTaskId);
+    hazardMetrics.value = result.hazard_metrics ?? null;
+    if (hazardMetrics.value?.available === false) {
+      hazardMetricsError.value = hazardMetrics.value.message ?? "历史地质灾害指标不可用";
+    }
+  } catch (error) {
+    hazardMetricsError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    isLoadingHazardMetrics.value = false;
   }
 }
 
@@ -169,6 +198,33 @@ function formatRecordValue(record: DatabaseRecord, field: DatabaseField): string
   }
 
   return isImageField(field) ? formatImageLabel(String(value)) : String(value);
+}
+
+function formatMetricValue(value: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "--";
+  }
+  return Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 4 });
+}
+
+function formatThresholdSummary(row: { thresholds?: Array<{ hazard: string; expression: string }> }): string {
+  const thresholds = row.thresholds ?? [];
+  if (!thresholds.length) {
+    return "--";
+  }
+  return thresholds.map((item) => `${item.hazard}${item.expression}`).join("；");
+}
+
+function formatTriggeredThresholds(row: { triggered_thresholds?: Array<{ hazard: string; expression: string }> }): string {
+  const thresholds = row.triggered_thresholds ?? [];
+  if (!thresholds.length) {
+    return "未命中";
+  }
+  return thresholds.map((item) => `${item.hazard}${item.expression}`).join("；");
+}
+
+function getHazardMetricRowClassName({ row }: { row: { threshold_status?: string } }): string {
+  return row.threshold_status === "warning" ? "hazard-metric-warning-row" : "";
 }
 
 function getTagType(field: DatabaseField, record: DatabaseRecord): "info" | "success" {
@@ -414,9 +470,17 @@ watch(
     if (baseUrl) {
       void loadSchema();
       void loadRecords();
+      void loadHazardMetrics();
     }
   },
   { immediate: true },
+);
+
+watch(
+  () => props.preprocessTaskId,
+  () => {
+    void loadHazardMetrics();
+  },
 );
 
 watch(
@@ -462,6 +526,92 @@ watch(
           </ElSpace>
         </div>
       </template>
+
+      <div v-if="viewMode === 'list'" class="hazard-metrics-panel">
+        <div class="hazard-metrics-header">
+          <div>
+            <span>历史地质灾害指标</span>
+            <strong>D-V 列整体统计</strong>
+          </div>
+          <small v-if="hazardMetrics?.generated_at">生成时间：{{ hazardMetrics.generated_at }}</small>
+        </div>
+
+        <ElAlert
+          v-if="isLoadingHazardMetrics"
+          class="element-database-alert"
+          type="info"
+          title="正在读取历史地质灾害指标..."
+          show-icon
+          :closable="false"
+        />
+        <ElAlert
+          v-else-if="hazardMetricsError"
+          class="element-database-alert"
+          type="warning"
+          title="历史地质灾害指标暂不可用"
+          :description="hazardMetricsError"
+          show-icon
+          :closable="false"
+        />
+        <ElAlert
+          v-else-if="!props.preprocessTaskId"
+          class="element-database-alert"
+          type="info"
+          title="完成一次预处理后，将在这里显示历史地质灾害指标。"
+          show-icon
+          :closable="false"
+        />
+        <template v-else-if="hasHazardMetrics">
+          <ElTable
+            :data="hazardMetricRows"
+            :row-class-name="getHazardMetricRowClassName"
+            border
+            stripe
+            size="small"
+            class="hazard-metrics-table"
+          >
+            <ElTableColumn prop="column" label="列" width="72" align="center" />
+            <ElTableColumn prop="label" label="指标" min-width="190" show-overflow-tooltip />
+            <ElTableColumn label="均值" min-width="120" align="right">
+              <template #default="{ row }">
+                <ElTag v-if="row.threshold_status === 'warning'" type="danger" effect="dark">
+                  {{ formatMetricValue(row.mean) }}
+                </ElTag>
+                <span v-else>{{ formatMetricValue(row.mean) }}</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="最小值" min-width="120" align="right">
+              <template #default="{ row }">{{ formatMetricValue(row.min) }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="最大值" min-width="120" align="right">
+              <template #default="{ row }">{{ formatMetricValue(row.max) }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="样本数" min-width="110" align="right">
+              <template #default="{ row }">{{ row.count.toLocaleString("zh-CN") }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="指标阈值" min-width="260" show-overflow-tooltip>
+              <template #default="{ row }">{{ formatThresholdSummary(row) }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="颜色提示" min-width="190" show-overflow-tooltip>
+              <template #default="{ row }">
+                <ElTag v-if="row.threshold_status === 'warning'" type="danger">
+                  {{ formatTriggeredThresholds(row) }}
+                </ElTag>
+                <ElTag v-else type="success">未超出阈值</ElTag>
+              </template>
+            </ElTableColumn>
+          </ElTable>
+          <p v-if="hazardMetrics?.summary" class="hazard-metrics-summary">{{ hazardMetrics.summary }}</p>
+        </template>
+        <ElAlert
+          v-else
+          class="element-database-alert"
+          type="info"
+          title="当前预处理结果尚未包含历史地质灾害指标，重新执行一次预处理后会生成。"
+          show-icon
+          :closable="false"
+        />
+      </div>
 
       <template v-if="viewMode === 'list'">
         <ElTabs v-model="activeTab" type="card" class="element-database-tabs">

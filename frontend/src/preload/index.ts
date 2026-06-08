@@ -5,6 +5,22 @@ type ApiConfig = {
   token: string;
 };
 
+type AuthSession = {
+  username: string;
+  displayName: string;
+  loginAt: string;
+};
+
+type LoginResult =
+  | {
+      ok: true;
+      session: AuthSession;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 type ImageSelectionResult = {
   paths: string[];
   previewUrl: string;
@@ -20,6 +36,9 @@ type OpenWorkbookResult = {
 };
 
 const api = {
+  login: (username: string, password: string): Promise<LoginResult> => ipcRenderer.invoke("ccx:login", username, password),
+  logout: (): Promise<void> => ipcRenderer.invoke("ccx:logout"),
+  getAuthSession: (): Promise<AuthSession | null> => ipcRenderer.invoke("ccx:get-auth-session"),
   getApiConfig: (): Promise<ApiConfig> => ipcRenderer.invoke("ccx:get-api-config"),
   selectImages: (): Promise<ImageSelectionResult> => ipcRenderer.invoke("ccx:select-images"),
   createImagePreview: (imagePath: string): Promise<string> => ipcRenderer.invoke("ccx:create-image-preview", imagePath),

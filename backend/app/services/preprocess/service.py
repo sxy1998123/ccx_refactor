@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from app.core.config import settings
+from app.services.hazard_excel import get_hazard_excel_metrics
 from app.services.preprocess.geologic import process_geologic_env
 from app.services.preprocess.settlement import process_tower_txt
 from app.services.risk import start_risk_task
@@ -83,6 +84,7 @@ def _run_task(task_id: str, payload: dict, task_dir: Path) -> None:
             for key, file_path in payload["tower_txt_files"].items()
         }
         environment = process_geologic_env(payload["env_txt_file"])
+        hazard_metrics = get_hazard_excel_metrics()
         result = {
             "task_id": task_id,
             "status": "completed",
@@ -99,6 +101,7 @@ def _run_task(task_id: str, payload: dict, task_dir: Path) -> None:
                 "point_cloud_files": payload.get("point_cloud_files", []),
             },
             "environment": environment,
+            "hazard_metrics": hazard_metrics,
             "tower_results": tower_results,
             "tower_summary": _summarize_towers(tower_results),
         }

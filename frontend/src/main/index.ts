@@ -11,6 +11,22 @@ type ApiConfig = {
   token: string;
 };
 
+type AuthSession = {
+  username: string;
+  displayName: string;
+  loginAt: string;
+};
+
+type LoginResult =
+  | {
+      ok: true;
+      session: AuthSession;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 type FileDialogOptions = {
   title: string;
   properties: Array<"openFile" | "openDirectory" | "multiSelections">;
@@ -23,7 +39,16 @@ const PYTHON_LOG_PREFIX = "[python]";
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcessWithoutNullStreams | null = null;
 let apiConfig: ApiConfig | null = null;
+let authSession: AuthSession | null = null;
 const imagePreviewPaths = new Map<string, string>();
+
+const localUsers = [
+  {
+    username: "admin",
+    password: "admin123",
+    displayName: "系统管理员",
+  },
+];
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -125,6 +150,36 @@ async function openHazardDataWorkbook(): Promise<{ path: string }> {
   }
 
   return { path: workbookPath };
+}
+
+function login(username: unknown, password: unknown): LoginResult {
+  const normalizedUsername = typeof username === "string" ? username.trim() : "";
+  const normalizedPassword = typeof password === "string" ? password : "";
+  const user = localUsers.find(
+    (candidate) => candidate.username === normalizedUsername && candidate.password === normalizedPassword,
+  );
+
+  if (!user) {
+    return {
+      ok: false,
+      message: "用户名或密码不正确",
+    };
+  }
+
+  authSession = {
+    username: user.username,
+    displayName: user.displayName,
+    loginAt: new Date().toISOString(),
+  };
+
+  return {
+    ok: true,
+    session: authSession,
+  };
+}
+
+function logout(): void {
+  authSession = null;
 }
 
 function getFreePort(startPort: number): Promise<number> {
@@ -248,6 +303,7 @@ async function startBackend(): Promise<ApiConfig> {
     CCX_SOLVER_ROOT: getCcxSolverRoot(),
     CCX_RAINFALL_DATA_DIR: path.join(getCcxSolverRoot(), "数据"),
     CCX_DEMO_POINTCLOUD: getDemoPointcloudPath(),
+    CCX_HAZARD_EXCEL_PATH: getHazardDataWorkbookCandidates()[0],
   };
 
   nodeInfo(`starting python backend at ${baseUrl}`);
@@ -381,6 +437,15 @@ if (!gotLock) {
       // Menu.setApplicationMenu(null);
       registerPreviewProtocol();
 
+      ipcMain.handle("ccx:login", async (_event, username: unknown, password: unknown) => {
+        return login(username, password);
+      });
+      ipcMain.handle("ccx:logout", async () => {
+        logout();
+      });
+      ipcMain.handle("ccx:get-auth-session", async () => {
+        return authSession;
+      });
       ipcMain.handle("ccx:get-api-config", async () => {
         return apiConfig ?? startBackend();
       });

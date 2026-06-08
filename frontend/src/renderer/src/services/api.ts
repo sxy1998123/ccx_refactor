@@ -205,6 +205,46 @@ export type PreprocessMetric = {
   }>;
 };
 
+export type HazardMetricValue = {
+  column: string;
+  key: string;
+  label: string;
+  count: number;
+  mean: number | null;
+  min: number | null;
+  max: number | null;
+  thresholds?: Array<{
+    hazard: string;
+    expression: string;
+    triggered: boolean;
+  }>;
+  triggered_thresholds?: Array<{
+    hazard: string;
+    expression: string;
+    triggered: boolean;
+  }>;
+  threshold_status?: "normal" | "warning";
+};
+
+export type HazardMetricsSummary = {
+  available: boolean;
+  source_file: string;
+  message?: string;
+  generated_at?: string;
+  summary?: string;
+  columns: Array<{
+    column: string;
+    key: string;
+    label: string;
+  }>;
+  overall: HazardMetricValue[];
+  sheets: Array<{
+    name: string;
+    row_count: number;
+    metrics: HazardMetricValue[];
+  }>;
+};
+
 export type PreprocessTowerResult = {
   source_file: string;
   file_name: string;
@@ -262,6 +302,7 @@ export type PreprocessResult = {
     metrics: Record<string, PreprocessMetric>;
   };
   tower_results?: Record<string, PreprocessTowerResult>;
+  hazard_metrics?: HazardMetricsSummary;
   tower_summary?: {
     tower_count: number;
     mean_lat: number | null;

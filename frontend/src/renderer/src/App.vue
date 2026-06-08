@@ -6,14 +6,22 @@ import { getAppInfo, getPreprocessTask, getRiskTask, type AppInfo, type Preproce
 import AnalysisView from "./views/AnalysisView.vue";
 import DatabaseView from "./views/DatabaseView.vue";
 import InputView from "./views/InputView.vue";
+import LoginView from "./views/LoginView.vue";
 import RiskView from "./views/RiskView.vue";
 
 type PageKey = "input" | "analysis" | "database" | "risk";
+type AuthSession = {
+  username: string;
+  displayName: string;
+  loginAt: string;
+};
 
 const apiBaseUrl = ref("");
 const backendStatus = ref("连接中");
 const appInfo = ref<AppInfo | null>(null);
 const activePage = ref<PageKey>("input");
+const authSession = ref<AuthSession | null>(null);
+const isBootstrapping = ref(false);
 const hasAnalysisResult = ref(false);
 const hasRiskReport = ref(true);
 const preprocessTask = ref<PreprocessTaskResponse | null>(null);
@@ -38,6 +46,22 @@ const preprocessTaskId = computed(() => preprocessTask.value?.task_id ?? "");
 
 function handleNavigate(page: PageKey): void {
   activePage.value = page;
+}
+
+function handleLoginSuccess(session: AuthSession): void {
+  authSession.value = session;
+  void initializeBackend();
+}
+
+async function handleLogout(): Promise<void> {
+  stopPreprocessPolling();
+  stopRiskPolling();
+  await window.ccx.logout();
+  authSession.value = null;
+  apiBaseUrl.value = "";
+  appInfo.value = null;
+  backendStatus.value = "等待登录";
+  activePage.value = "input";
 }
 
 function handleAnalysisSubmitted(task: PreprocessTaskResponse): void {
@@ -189,7 +213,12 @@ function startRiskPolling(taskId: string): void {
   void poll();
 }
 
-onMounted(async () => {
+async function initializeBackend(): Promise<void> {
+  if (isBootstrapping.value || apiBaseUrl.value) {
+    return;
+  }
+
+  isBootstrapping.value = true;
   const restoredTask = restorePreprocessTask();
   if (restoredTask) {
     setPreprocessTask(restoredTask);
@@ -208,7 +237,24 @@ onMounted(async () => {
   } catch (error) {
     backendStatus.value = "连接失败";
     console.error(error);
+  } finally {
+    isBootstrapping.value = false;
   }
+}
+
+onMounted(async () => {
+  try {
+    const session = await window.ccx.getAuthSession();
+    if (session) {
+      authSession.value = session;
+      await initializeBackend();
+      return;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  backendStatus.value = "等待登录";
 });
 
 onBeforeUnmount(() => {
@@ -219,12 +265,13 @@ onBeforeUnmount(() => {
 
 <template>
   <ElConfigProvider :locale="zhCn">
-    <main class="app-shell">
+    <LoginView v-if="!authSession" @login-success="handleLoginSuccess" />
+    <main v-else class="app-shell">
       <aside class="app-rail">
         <div class="brand-block">
           <div class="brand-mark">安</div>
           <div>
-            <strong>杆塔安全评估</strong>
+            <strong>杆塔失稳风险快速评估系统</strong>
           </div>
         </div>
 
@@ -256,6 +303,10 @@ onBeforeUnmount(() => {
             <h1>{{ activePageMeta.title }}</h1>
             <span>{{ activePageMeta.subtitle }}</span>
           </div>
+          <div class="session-bar">
+            <span>{{ authSession.displayName }}</span>
+            <button type="button" @click="handleLogout">退出</button>
+          </div>
         </header>
 
         <section class="content-stage">
@@ -274,7 +325,7 @@ onBeforeUnmount(() => {
             :preprocess-task-id="preprocessTaskId"
             @navigate="handleNavigate"
           />
-          <DatabaseView v-else-if="activePage === 'database'" :api-base-url="apiBaseUrl" />
+          <DatabaseView v-else-if="activePage === 'database'" :api-base-url="apiBaseUrl" :preprocess-task-id="preprocessTaskId" />
           <RiskView
             v-else
             :api-base-url="apiBaseUrl"

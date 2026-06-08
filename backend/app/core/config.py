@@ -109,9 +109,25 @@ def _ccx_rainfall_data_dir() -> Path:
     return (_ccx_root() / "数据").resolve()
 
 
+def _hazard_excel_path() -> Path:
+    configured_path = os.getenv("CCX_HAZARD_EXCEL_PATH")
+    if configured_path:
+        return Path(configured_path).expanduser().resolve()
+
+    candidates = [_backend_root() / "app" / "db" / "excel" / "data.xlsx"]
+    bundle_root = _pyinstaller_root()
+    if bundle_root is not None:
+        candidates.append(bundle_root / "app" / "db" / "excel" / "data.xlsx")
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
+
+
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = os.getenv("CCX_APP_NAME", "CCX Analysis Backend")
+    app_name: str = os.getenv("CCX_APP_NAME", "杆塔失稳风险快速评估系统")
     version: str = os.getenv("CCX_VERSION", "0.1.0")
     environment: str = os.getenv("CCX_ENV", "development")
     host: str = os.getenv("CCX_HOST", "127.0.0.1")
@@ -123,6 +139,7 @@ class Settings:
     ccx_root: Path = field(default_factory=_ccx_root)
     ccx_results_dir: Path = field(default_factory=_ccx_results_dir)
     ccx_rainfall_data_dir: Path = field(default_factory=_ccx_rainfall_data_dir)
+    hazard_excel_path: Path = field(default_factory=_hazard_excel_path)
 
 
 settings = Settings()

@@ -5,6 +5,29 @@ declare module "*.jpeg" {
 
 interface Window {
   ccx: {
+    login: (
+      username: string,
+      password: string,
+    ) => Promise<
+      | {
+          ok: true;
+          session: {
+            username: string;
+            displayName: string;
+            loginAt: string;
+          };
+        }
+      | {
+          ok: false;
+          message: string;
+        }
+    >;
+    logout: () => Promise<void>;
+    getAuthSession: () => Promise<{
+      username: string;
+      displayName: string;
+      loginAt: string;
+    } | null>;
     getApiConfig: () => Promise<{
       baseUrl: string;
       token: string;
