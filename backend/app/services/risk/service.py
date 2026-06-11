@@ -9,6 +9,7 @@ from typing import Literal
 
 from app.core.config import settings
 from app.services.risk.ccx_adapter import detect_stress_unit, run_full_risk, stress_unit_to_pa_factor
+from app.services.risk.ccx_metrics import extract_structural_metrics_from_h5
 from app.services.risk.report_builder import build_risk_report
 
 RiskStatus = Literal["queued", "running", "completed", "failed"]
@@ -84,6 +85,7 @@ def get_risk_result(task_id: str) -> dict:
         raise RiskTaskNotFound(task_id)
     result = json.loads(result_path.read_text(encoding="utf-8"))
     _ensure_rainfall_cases(result)
+    _ensure_structural_metrics(result)
     return _normalize_result_units(result)
 
 
@@ -229,10 +231,43 @@ def _ensure_rainfall_cases(result: dict) -> None:
                     "risk_index": risk_index,
                     "stress_over_limit": bool(risk_index is not None and risk_index > 1),
                     "h5_path": row.get("h5", ""),
+                    **extract_structural_metrics_from_h5(row.get("h5", "")),
                 }
             )
 
     summary["cases"] = sorted(cases, key=lambda case: ((case.get("rainfall_mm") or 0), (case.get("day") or 0), case.get("case") or ""))
+
+
+def _ensure_structural_metrics(result: dict) -> None:
+    base = result.get("base")
+    if isinstance(base, dict):
+        _merge_structural_metrics(base, str(base.get("h5_path", "")))
+
+    summary = result.get("full", {}).get("summary")
+    if not isinstance(summary, dict):
+        return
+
+    cases = summary.get("cases")
+    if isinstance(cases, list):
+        for item in cases:
+            if isinstance(item, dict):
+                _merge_structural_metrics(item, str(item.get("h5_path", "")))
+
+    over_limit_cases = summary.get("over_limit_cases")
+    if isinstance(over_limit_cases, list):
+        for item in over_limit_cases:
+            if isinstance(item, dict):
+                _merge_structural_metrics(item, str(item.get("h5_path", "")))
+
+    max_case = summary.get("max_case")
+    if isinstance(max_case, dict):
+        _merge_structural_metrics(max_case, str(max_case.get("h5_path", "")))
+
+
+def _merge_structural_metrics(target: dict, h5_path: str) -> None:
+    if "tower_tilt_deg" in target and "max_abs_strain_micro" in target:
+        return
+    target.update(extract_structural_metrics_from_h5(h5_path))
 
 
 def _float_or_none(value: object) -> float | None:

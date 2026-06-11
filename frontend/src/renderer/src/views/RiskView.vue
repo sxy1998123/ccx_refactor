@@ -12,6 +12,8 @@ type RiskCaseView = {
   maxAbsStressPa: number | null;
   riskIndex: number | null;
   stressOverLimit: boolean;
+  towerTiltDeg: number | null;
+  maxAbsStrainMicro: number | null;
 };
 type RainfallGroup = {
   key: string;
@@ -61,6 +63,8 @@ const allRiskCases = computed<RiskCaseView[]>(() => {
       maxAbsStressPa: base.max_abs_stress ?? null,
       riskIndex: base.risk_index ?? null,
       stressOverLimit: Boolean((base.risk_index ?? 0) >= 1),
+      towerTiltDeg: base.tower_tilt_deg ?? null,
+      maxAbsStrainMicro: base.max_abs_strain_micro ?? null,
     });
   }
 
@@ -76,6 +80,8 @@ const allRiskCases = computed<RiskCaseView[]>(() => {
       maxAbsStressPa: item.max_abs_stress_pa,
       riskIndex: item.risk_index,
       stressOverLimit: item.stress_over_limit,
+      towerTiltDeg: item.tower_tilt_deg ?? null,
+      maxAbsStrainMicro: item.max_abs_strain_micro ?? null,
     });
   }
   return cases;
@@ -142,8 +148,10 @@ const riskFactors = computed(() => {
   const factors = [
     { label: "当前工况", value: current?.label || "--" },
     { label: "风险等级", value: riskLevel(current?.riskIndex) },
-    { label: "阈值占比", value: formatRiskPercent(current?.riskIndex) },
+    { label: "应力阈值占比", value: formatRiskPercent(current?.riskIndex) },
     { label: "最大应力", value: formatStress(current?.maxAbsStressPa) },
+    { label: "杆塔倾角", value: formatTilt(current?.towerTiltDeg) },
+    { label: "最大应变", value: formatStrain(current?.maxAbsStrainMicro) },
   ];
   if (towerMaterial.value) {
     factors.unshift({ label: "杆塔材质", value: towerMaterial.value });
@@ -364,6 +372,20 @@ function formatStress(value: number | null | undefined): string {
     return "--";
   }
   return `${(value / 1_000_000).toFixed(2)} MPa`;
+}
+
+function formatTilt(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "--";
+  }
+  return `${value.toFixed(4)}°`;
+}
+
+function formatStrain(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "--";
+  }
+  return `${value.toFixed(value >= 100 ? 0 : 1)} με`;
 }
 
 function formatRiskIndex(value: number | null | undefined): string {

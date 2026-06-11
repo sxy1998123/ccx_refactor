@@ -49,7 +49,6 @@ try {
     --name backend `
     --paths . `
     --add-data "app/db/schema.sql;app/db" `
-    --add-data "app/vendor/ccx;app/vendor/ccx" `
     --hidden-import app.main `
     --hidden-import uvicorn.loops.auto `
     --hidden-import uvicorn.protocols.http.auto `
@@ -61,12 +60,13 @@ finally {
   Pop-Location
 }
 
-# Ensure vendor/ccx is also available alongside backend.exe (not only inside _internal/)
+# Keep vendor/ccx outside PyInstaller _internal so electron-builder packages a single solver copy.
 $backendVendorCcx = Join-Path $backend "app\vendor\ccx"
 $packagedVendorCcx = Join-Path $backendPackage "app\vendor\ccx"
 Remove-WorkspaceItem (Join-Path $backendPackage "app")
 New-Item -ItemType Directory -Path $packagedVendorCcx -Force | Out-Null
 Copy-Item -LiteralPath $backendVendorCcx -Destination $packagedVendorCcx\.. -Recurse -Force
+Remove-WorkspaceItem (Join-Path $backendPackage "_internal\app\vendor\ccx")
 
 $backendHazardWorkbook = Join-Path $backend "app\db\excel\data.xlsx"
 if (Test-Path -LiteralPath $backendHazardWorkbook) {

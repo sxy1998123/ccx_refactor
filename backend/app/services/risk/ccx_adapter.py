@@ -9,6 +9,7 @@ from types import ModuleType
 from typing import Any
 
 from app.core.config import settings
+from app.services.risk.ccx_metrics import extract_structural_metrics_from_h5
 
 INP_BY_TOWER_TYPE = {
     "guxing": "Guxing_tower-m-9B-Pa.inp",
@@ -129,11 +130,13 @@ def _normalize_result(result: Any, row: dict[str, Any], inp_path: Path, displace
     max_stress_pa = max_stress_raw * stress_factor if max_stress_raw is not None else None
     max_abs_stress_pa = max_abs_stress_raw * stress_factor if max_abs_stress_raw is not None else None
     risk_index = (max_abs_stress_pa / STRESS_LIMIT_PA) if max_abs_stress_pa is not None else None
+    h5_path = str(result.h5_path or "")
+    structural_metrics = extract_structural_metrics_from_h5(h5_path)
 
     return {
         "case": result.case_name,
         "inp_path": str(result.inp_path),
-        "h5_path": str(result.h5_path or ""),
+        "h5_path": h5_path,
         "summary_csv": str(result.csv_path),
         "solver_log": str(result.solver_log_path or ""),
         "log": str(result.log_path),
@@ -152,6 +155,7 @@ def _normalize_result(result: Any, row: dict[str, Any], inp_path: Path, displace
         "stress_element": getattr(stress, "element_label", None),
         "stress_component": getattr(stress, "component", None),
         "stress_error": getattr(stress, "error", ""),
+        **structural_metrics,
     }
 
 
@@ -174,6 +178,8 @@ def _summarize_rainfall(rows: list[dict[str, str]], inp_path: Path) -> dict[str,
         stress_pa = raw_abs * factor if raw_abs is not None else None
         risk_index = stress_pa / STRESS_LIMIT_PA if stress_pa is not None else None
         is_over = bool(risk_index is not None and risk_index > 1)
+        h5_path = row.get("h5", "")
+        structural_metrics = extract_structural_metrics_from_h5(h5_path)
         case = {
             "case": row.get("case", ""),
             "label": row.get("label", ""),
@@ -182,7 +188,8 @@ def _summarize_rainfall(rows: list[dict[str, str]], inp_path: Path) -> dict[str,
             "max_abs_stress_pa": stress_pa,
             "risk_index": risk_index,
             "stress_over_limit": is_over,
-            "h5_path": row.get("h5", ""),
+            "h5_path": h5_path,
+            **structural_metrics,
         }
         cases.append(case)
 

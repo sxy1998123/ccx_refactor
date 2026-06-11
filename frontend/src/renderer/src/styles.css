@@ -2962,7 +2962,7 @@ button {
 .risk-page .risk-controls {
   grid-column: 1 / -1;
   grid-row: 1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .risk-day-selector {
@@ -3034,6 +3034,12 @@ button {
   margin-top: 14px;
   color: #1f2d2f;
   font-size: 22px;
+}
+
+.risk-page .factor-tile strong {
+  font-size: 18px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .risk-action {

@@ -139,6 +139,9 @@ export type RainfallRiskCase = {
   risk_index: number | null;
   stress_over_limit: boolean;
   h5_path: string;
+  tower_tilt_deg?: number | null;
+  max_abs_strain?: number | null;
+  max_abs_strain_micro?: number | null;
 };
 
 export type RiskResult = {
@@ -169,6 +172,9 @@ export type RiskResult = {
     stress_element: number | null;
     stress_component: number | null;
     stress_error: string;
+    tower_tilt_deg?: number | null;
+    max_abs_strain?: number | null;
+    max_abs_strain_micro?: number | null;
   };
   full?: {
     summary_csv: string;
