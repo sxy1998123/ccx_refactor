@@ -217,7 +217,7 @@ def _read_pcd_header(source_path: Path) -> dict[str, Any]:
     return header
 
 
-def _open_supported_pcd(source_path: Path, header: dict[str, Any]) -> np.memmap:
+def _open_supported_pcd(source_path: Path, header: dict[str, Any]) -> np.ndarray:
     fields = header.get("fields", [])
     sizes = [int(value) for value in header.get("size", [])]
     types = header.get("type", [])
@@ -229,14 +229,97 @@ def _open_supported_pcd(source_path: Path, header: dict[str, Any]) -> np.memmap:
         raise PointCloudError("PCD header FIELDS/SIZE/TYPE/COUNT lengths do not match")
     if any(count != 1 for count in counts):
         raise PointCloudError("Only PCD fields with COUNT 1 are supported")
-    if header.get("data") != "binary":
-        raise PointCloudError("Only DATA binary PCD files are supported")
-
     dtype_fields = []
     for field, size, field_type in zip(fields, sizes, types, strict=True):
         dtype_fields.append((field, _pcd_dtype(field, size, field_type)))
     dtype = np.dtype(dtype_fields)
-    return np.memmap(source_path, dtype=dtype, mode="r", offset=int(header["data_offset"]), shape=(int(header["points"]),))
+
+    data_type = header.get("data")
+    if data_type == "binary":
+        return np.memmap(source_path, dtype=dtype, mode="r", offset=int(header["data_offset"]), shape=(int(header["points"]),))
+    if data_type == "binary_compressed":
+        return _read_binary_compressed_pcd(source_path, header, dtype)
+    raise PointCloudError("Only DATA binary and DATA binary_compressed PCD files are supported")
+
+
+def _read_binary_compressed_pcd(source_path: Path, header: dict[str, Any], dtype: np.dtype) -> np.ndarray:
+    point_count = int(header["points"])
+    point_step = int(dtype.itemsize)
+    with source_path.open("rb") as file:
+        file.seek(int(header["data_offset"]))
+        sizes = np.frombuffer(file.read(8), dtype="<u4", count=2)
+        if sizes.size != 2:
+            raise PointCloudError("PCD compressed payload is missing size header")
+        compressed_size = int(sizes[0])
+        uncompressed_size = int(sizes[1])
+        compressed = file.read(compressed_size)
+
+    expected_size = point_count * point_step
+    if uncompressed_size != expected_size:
+        raise PointCloudError(f"PCD uncompressed size mismatch: {uncompressed_size} != {expected_size}")
+    if len(compressed) != compressed_size:
+        raise PointCloudError("PCD compressed payload is truncated")
+
+    decompressed = _lzf_decompress(compressed, uncompressed_size)
+    return _decode_compressed_pcd_points(decompressed, dtype, point_count)
+
+
+def _decode_compressed_pcd_points(buffer: bytes, dtype: np.dtype, point_count: int) -> np.ndarray:
+    output = np.empty(point_count, dtype=dtype)
+    source_offset = 0
+    for field_name in dtype.names or ():
+        field_dtype = dtype.fields[field_name][0]
+        field_size = int(field_dtype.itemsize)
+        byte_count = field_size * point_count
+        field_bytes = buffer[source_offset : source_offset + byte_count]
+        if len(field_bytes) != byte_count:
+            raise PointCloudError(f"PCD compressed field is truncated: {field_name}")
+        output[field_name] = np.frombuffer(field_bytes, dtype=field_dtype, count=point_count)
+        source_offset += byte_count
+    return output
+
+
+def _lzf_decompress(data: bytes, expected_size: int) -> bytes:
+    output = bytearray(expected_size)
+    input_index = 0
+    output_index = 0
+    data_length = len(data)
+
+    while input_index < data_length:
+        control = data[input_index]
+        input_index += 1
+        if control < 32:
+            literal_length = control + 1
+            if input_index + literal_length > data_length or output_index + literal_length > expected_size:
+                raise PointCloudError("Invalid PCD LZF literal block")
+            output[output_index : output_index + literal_length] = data[input_index : input_index + literal_length]
+            input_index += literal_length
+            output_index += literal_length
+            continue
+
+        length = control >> 5
+        reference_offset = (control & 0x1F) << 8
+        if length == 7:
+            if input_index >= data_length:
+                raise PointCloudError("Invalid PCD LZF extended length")
+            length += data[input_index]
+            input_index += 1
+        if input_index >= data_length:
+            raise PointCloudError("Invalid PCD LZF back-reference")
+        reference_offset += data[input_index]
+        input_index += 1
+        length += 2
+        reference_index = output_index - reference_offset - 1
+        if reference_index < 0 or output_index + length > expected_size:
+            raise PointCloudError("Invalid PCD LZF reference range")
+        for _ in range(length):
+            output[output_index] = output[reference_index]
+            output_index += 1
+            reference_index += 1
+
+    if output_index != expected_size:
+        raise PointCloudError(f"PCD LZF output size mismatch: {output_index} != {expected_size}")
+    return bytes(output)
 
 
 def _pcd_dtype(field: str, size: int, field_type: str) -> str:
@@ -259,7 +342,7 @@ def _pcd_dtype(field: str, size: int, field_type: str) -> str:
     raise PointCloudError(f"Unsupported PCD field type for {field}: TYPE {field_type}, SIZE {size}")
 
 
-def _prepare_bounds(points: np.memmap) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _prepare_bounds(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     finite = np.isfinite(points["x"]) & np.isfinite(points["y"]) & np.isfinite(points["z"])
     finite_indices = np.flatnonzero(finite)
     if finite_indices.size == 0:
@@ -287,7 +370,7 @@ def _prepare_bounds(points: np.memmap) -> tuple[np.ndarray, np.ndarray, np.ndarr
 
 
 def _build_octree_codes(
-    points: np.memmap,
+    points: np.ndarray,
     finite_indices: np.ndarray,
     bounds_min: np.ndarray,
     bounds_max: np.ndarray,
@@ -308,7 +391,7 @@ def _write_node(
     depth: int,
     indices: np.ndarray,
     point_limit: int,
-    points: np.memmap,
+    points: np.ndarray,
     bounds_min: np.ndarray,
     bounds_max: np.ndarray,
     nodes_dir: Path,
