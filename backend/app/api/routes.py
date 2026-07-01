@@ -47,8 +47,8 @@ class DatabaseDeleteResponse(BaseModel):
 
 class PreprocessTaskRequest(BaseModel):
     route_id: str
-    tower_type: str
-    inp_file: str
+    tower_type: str = ""
+    inp_file: str = ""
     tower_txt_files: dict[str, str]
     env_txt_file: str
     image_files: list[str] = []

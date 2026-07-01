@@ -18,6 +18,13 @@ TaskStatus = Literal["queued", "running", "completed", "failed"]
 _TASKS: dict[str, dict] = {}
 _TASK_LOCK = threading.Lock()
 
+DEFAULT_TOWER_TYPE = "maotouying"
+TOWER_INP_FILES = {
+    "maotouying": "Maotouyin_tower-mm-14B-MPa.inp",
+    "guxing": "Guxing_tower-m-9B-Pa.inp",
+    "jiubei": "Jiubei_tower-mm-2B-MPa.inp",
+}
+
 
 class PreprocessTaskNotFound(LookupError):
     pass
@@ -27,13 +34,14 @@ def submit_preprocess_task(payload: dict) -> dict:
     task_id = f"pre-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
     task_dir = _task_dir(task_id)
     task_dir.mkdir(parents=True, exist_ok=True)
+    tower_type = _normalize_tower_type(payload.get("tower_type"))
 
     task = {
         "task_id": task_id,
         "status": "queued",
         "route_id": payload["route_id"],
-        "tower_type": payload["tower_type"],
-        "inp_file": payload.get("inp_file", ""),
+        "tower_type": tower_type,
+        "inp_file": TOWER_INP_FILES[tower_type],
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
         "message": "预处理任务已创建",
@@ -84,14 +92,18 @@ def _run_task(task_id: str, payload: dict, task_dir: Path) -> None:
             for key, file_path in payload["tower_txt_files"].items()
         }
         environment = process_geologic_env(payload["env_txt_file"])
-        hazard_metrics = get_hazard_excel_metrics()
+        tower_type, inp_file = _resolve_tower_from_environment(environment)
+        environment.setdefault("metadata", {})["type"] = tower_type
+        tower_summary = _summarize_towers(tower_results)
+        displacement_seed = _hazard_metric_seed(tower_summary)
+        hazard_metrics = get_hazard_excel_metrics(displacement_seed)
         result = {
             "task_id": task_id,
             "status": "completed",
             "message": "预处理完成",
             "route_id": payload["route_id"],
-            "tower_type": payload["tower_type"],
-            "inp_file": payload.get("inp_file", ""),
+            "tower_type": tower_type,
+            "inp_file": inp_file,
             "created_at": get_preprocess_task(task_id).get("created_at", ""),
             "completed_at": _now_iso(),
             "inputs": {
@@ -103,14 +115,14 @@ def _run_task(task_id: str, payload: dict, task_dir: Path) -> None:
             "environment": environment,
             "hazard_metrics": hazard_metrics,
             "tower_results": tower_results,
-            "tower_summary": _summarize_towers(tower_results),
+            "tower_summary": tower_summary,
         }
         _result_path(task_id).write_text(
             json.dumps(result, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         start_risk_task(task_id, result)
-        _update_task(task_id, status="completed", message="预处理完成")
+        _update_task(task_id, status="completed", message="预处理完成", tower_type=tower_type, inp_file=inp_file)
     except Exception as error:  # noqa: BLE001 - persisted task failure should include the concrete cause.
         failure = {
             "task_id": task_id,
@@ -189,8 +201,40 @@ def _summarize_towers(tower_results: dict[str, dict]) -> dict:
     }
 
 
+def _normalize_tower_type(value: object) -> str:
+    if not isinstance(value, str):
+        return DEFAULT_TOWER_TYPE
+    normalized = value.strip().lower()
+    return normalized if normalized in TOWER_INP_FILES else DEFAULT_TOWER_TYPE
+
+
+def _resolve_tower_from_environment(environment: dict) -> tuple[str, str]:
+    metadata = environment.get("metadata", {})
+    env_type = metadata.get("type") if isinstance(metadata, dict) else None
+    tower_type = _normalize_tower_type(env_type)
+    return tower_type, TOWER_INP_FILES[tower_type]
+
+
+def _hazard_metric_seed(tower_summary: dict) -> tuple[float | None, float | None, float | None]:
+    displacement = tower_summary.get("ccx_displacement_m", {})
+    if not isinstance(displacement, dict):
+        return (None, None, None)
+    return (
+        _float_or_none(displacement.get("x")),
+        _float_or_none(displacement.get("y")),
+        _float_or_none(displacement.get("z")),
+    )
+
+
 def _mean_or_none(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
+
+
+def _float_or_none(value: object) -> float | None:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def _task_dir(task_id: str) -> Path:

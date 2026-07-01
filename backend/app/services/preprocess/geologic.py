@@ -56,12 +56,12 @@ def _parse_metadata_line(line: str) -> tuple[str, str] | None:
     if not line:
         return None
 
-    match = re.match(r'^(shape|material)\s*[:：]\s*["“”]?(.+?)["“”]?\s*$', line, re.IGNORECASE)
+    match = re.match(r"^(shape|material|type)\s*[:：]\s*[\"'“”‘’]?(.+?)[\"'“”‘’]?\s*$", line, re.IGNORECASE)
     if not match:
         return None
 
     key = match.group(1).lower()
-    value = match.group(2).strip().strip('"“”')
+    value = match.group(2).strip().strip("\"'“”‘’")
     return (key, value) if value else None
 
 

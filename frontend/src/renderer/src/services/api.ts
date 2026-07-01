@@ -238,6 +238,7 @@ export type HazardMetricsSummary = {
   message?: string;
   generated_at?: string;
   summary?: string;
+  seed?: string;
   columns: Array<{
     column: string;
     key: string;

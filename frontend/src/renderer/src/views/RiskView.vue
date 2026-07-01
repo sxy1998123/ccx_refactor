@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { ElButton, ElDialog } from "element-plus";
 import StressCloudViewer from "../components/StressCloudViewer.vue";
 import { getRiskResult, getRiskTask, type RainfallRiskCase, type RiskResult, type RiskTaskResponse } from "../services/api";
 
@@ -42,6 +43,7 @@ const riskError = ref("");
 const isLoadingRisk = ref(false);
 const selectedRainfallKey = ref("base");
 const selectedCaseKey = ref("base");
+const isStressCloudDialogOpen = ref(false);
 let riskPollTimer: number | undefined;
 let riskPollRunId = 0;
 
@@ -195,6 +197,7 @@ watch(
     riskError.value = "";
     selectedRainfallKey.value = "base";
     selectedCaseKey.value = "base";
+    isStressCloudDialogOpen.value = false;
 
     if (!baseUrl || !taskId) {
       return;
@@ -205,6 +208,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  isStressCloudDialogOpen.value = false;
   stopRiskPolling();
 });
 
@@ -276,6 +280,14 @@ function selectRainfallGroup(group: RainfallGroup): void {
 
 function selectCase(item: RiskCaseView): void {
   selectedCaseKey.value = item.case;
+}
+
+function openStressCloudDialog(): void {
+  isStressCloudDialogOpen.value = true;
+}
+
+function closeStressCloudDialog(): void {
+  isStressCloudDialogOpen.value = false;
 }
 
 function rainfallKey(value: number | null | undefined): string {
@@ -551,7 +563,10 @@ function formatDay(value: number | null | undefined): string {
             <span>结构结果</span>
             <h2>{{ selectedCase?.label || "应力云图" }}</h2>
           </div>
-          <strong>{{ riskLevel(selectedCase?.riskIndex) }}</strong>
+          <div class="stress-panel-title-actions">
+            <ElButton class="cloud-expand-button" type="primary" plain @click="openStressCloudDialog">放大查看云图</ElButton>
+            <strong>{{ riskLevel(selectedCase?.riskIndex) }}</strong>
+          </div>
         </div>
         <StressCloudViewer :base-url="apiBaseUrl" :task-id="preprocessTaskId" :case-name="selectedCase?.case || 'base'" />
       </div>
@@ -597,6 +612,23 @@ function formatDay(value: number | null | undefined): string {
       </section>
       </div>
       </template>
+
+      <ElDialog v-model="isStressCloudDialogOpen" fullscreen destroy-on-close class="stress-cloud-el-dialog" :show-close="false">
+        <template #header>
+          <header class="stress-cloud-dialog-header">
+            <div>
+              <span>结构结果</span>
+              <h2>{{ selectedCase?.label || "应力云图" }}</h2>
+            </div>
+            <ElButton type="primary" plain @click="closeStressCloudDialog">关闭</ElButton>
+          </header>
+        </template>
+        <template v-if="isStressCloudDialogOpen">
+          <div class="dialog-stress-cloud-stage">
+            <StressCloudViewer :base-url="apiBaseUrl" :task-id="preprocessTaskId" :case-name="selectedCase?.case || 'base'" />
+          </div>
+        </template>
+      </ElDialog>
     </template>
   </section>
 </template>

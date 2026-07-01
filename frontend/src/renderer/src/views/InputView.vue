@@ -12,7 +12,6 @@ type TowerTypeOption = {
 
 type PersistedInputFormState = {
   routeId: string;
-  towerType: string;
   towerTxtFiles: Record<TowerTxtKey, string>;
   envTxtFile: string;
   imageFiles: string[];
@@ -125,7 +124,7 @@ const workflowSteps = computed(() => {
     {
       key: "basic",
       label: "基础信息",
-      status: preprocessStatus ? "done" : routeId.value.trim() && towerType.value ? "done" : "active",
+      status: preprocessStatus ? "done" : routeId.value.trim() ? "done" : "active",
       loading: false,
     },
     {
@@ -158,7 +157,6 @@ const workflowSteps = computed(() => {
 function getCurrentFormState(): PersistedInputFormState {
   return {
     routeId: routeId.value,
-    towerType: towerType.value,
     towerTxtFiles: { ...towerTxtFiles.value },
     envTxtFile: envTxtFile.value,
     imageFiles: [...imageFiles.value],
@@ -192,7 +190,7 @@ function restoreInputFormState(): PersistedInputFormState | null {
 
 async function applyInputFormState(state: PersistedInputFormState): Promise<void> {
   routeId.value = state.routeId ?? "";
-  towerType.value = towerTypes.some((item) => item.value === state.towerType) ? state.towerType : towerTypes[0].value;
+  towerType.value = towerTypes[0].value;
   towerTxtFiles.value = {
     tower1: state.towerTxtFiles?.tower1 ?? "",
     tower2: state.towerTxtFiles?.tower2 ?? "",
@@ -329,9 +327,6 @@ function validateForm(): string {
   if (!routeId.value.trim()) {
     return "请输入线路号。";
   }
-  if (!towerType.value) {
-    return "请选择杆塔类型。";
-  }
   if (selectedTowerCount.value !== 4) {
     return "请完整选择 4 个塔基端 TXT 文件。";
   }
@@ -399,7 +394,7 @@ onMounted(() => {
 });
 
 watch(
-  [routeId, towerType, towerTxtFiles, envTxtFile, imageFiles, pointCloudFiles],
+  [routeId, towerTxtFiles, envTxtFile, imageFiles, pointCloudFiles],
   () => {
     saveInputFormState();
   },
@@ -439,15 +434,6 @@ watch(
                 placeholder="请输入线路号，例如 YX-2026-04-17"
                 :disabled="isSubmittingAnalysis"
               />
-            </label>
-
-            <label class="form-control">
-              <span class="field-label">杆塔类型</span>
-              <select v-model="towerType" :disabled="isSubmittingAnalysis">
-                <option v-for="item in towerTypes" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
             </label>
           </div>
         </div>

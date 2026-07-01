@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -36,7 +37,7 @@ HAZARD_COLUMNS = [
     ("V", "canopy_coverage_percent", "冠层覆盖率（%）"),
 ]
 COLUMN_BY_LETTER = {column: {"key": key, "label": label} for column, key, label in HAZARD_COLUMNS}
-CACHE_VERSION = 3
+CACHE_VERSION = 5
 
 SAFE_SURVEY_PROFILE: dict[str, dict[str, float]] = {
     "clay_content_percent": {"value": 24.0, "min": 22.0, "max": 26.0},
@@ -231,8 +232,9 @@ HAZARD_THRESHOLD_RULES: dict[str, list[dict[str, Any]]] = {
 }
 
 
-def get_hazard_excel_metrics() -> dict[str, Any]:
+def get_hazard_excel_metrics(seed_values: tuple[float | None, float | None, float | None] | None = None) -> dict[str, Any]:
     workbook_path = settings.hazard_excel_path
+    seed_key = _seed_key(seed_values)
     if not workbook_path.exists():
         return {
             "available": False,
@@ -244,7 +246,7 @@ def get_hazard_excel_metrics() -> dict[str, Any]:
         }
 
     stat = workbook_path.stat()
-    cache_path = settings.data_dir / "hazard_excel_metrics.json"
+    cache_path = settings.data_dir / "hazard_excel_stats.json"
     cache_key = {
         "version": CACHE_VERSION,
         "source_file": str(workbook_path),
@@ -252,12 +254,11 @@ def get_hazard_excel_metrics() -> dict[str, Any]:
         "mtime_ns": stat.st_mtime_ns,
     }
     cached = _read_cache(cache_path, cache_key)
-    if cached is not None:
-        return cached
+    stats_result = cached if cached is not None else _compute_stats(workbook_path, cache_key)
+    if cached is None:
+        _write_cache(cache_path, stats_result)
 
-    result = _compute_metrics(workbook_path, cache_key)
-    _write_cache(cache_path, result)
-    return result
+    return _build_metrics_result(stats_result, seed_key)
 
 
 def _read_cache(cache_path: Path, cache_key: dict[str, Any]) -> dict[str, Any] | None:
@@ -281,7 +282,7 @@ def _write_cache(cache_path: Path, result: dict[str, Any]) -> None:
         return
 
 
-def _compute_metrics(workbook_path: Path, cache_key: dict[str, Any]) -> dict[str, Any]:
+def _compute_stats(workbook_path: Path, cache_key: dict[str, Any]) -> dict[str, Any]:
     overall_stats = _new_stats()
     sheet_results = []
 
@@ -293,18 +294,38 @@ def _compute_metrics(workbook_path: Path, cache_key: dict[str, Any]) -> dict[str
                 {
                     "name": sheet["name"],
                     "row_count": row_count,
-                    "metrics": _finalize_stats(sheet_stats),
+                    "stats": sheet_stats,
                 }
             )
 
     return {
-        "available": True,
         "source_file": str(workbook_path),
+        "cache_key": cache_key,
+        "overall_stats": overall_stats,
+        "sheets": sheet_results,
+    }
+
+
+def _build_metrics_result(stats_result: dict[str, Any], seed_key: str) -> dict[str, Any]:
+    sheet_results = []
+    for sheet in stats_result.get("sheets", []):
+        sheet_results.append(
+            {
+                "name": sheet.get("name", ""),
+                "row_count": int(sheet.get("row_count") or 0),
+                "metrics": _finalize_stats(sheet.get("stats", {}), seed_key, f"sheet:{sheet.get('name', '')}"),
+            }
+        )
+
+    return {
+        "available": True,
+        "source_file": str(stats_result.get("source_file", "")),
         "generated_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "summary": "本次勘测生成指标均处于安全参考范围内，未见明显地质灾害高易发特征。",
-        "cache_key": cache_key,
+        "cache_key": stats_result.get("cache_key", {}),
+        "seed": seed_key,
         "columns": _column_metadata(),
-        "overall": _finalize_stats(overall_stats),
+        "overall": _finalize_stats(stats_result.get("overall_stats", {}), seed_key, "overall"),
         "sheets": sheet_results,
     }
 
@@ -388,13 +409,14 @@ def _add_value(stats: dict[str, float | int | None], value: float) -> None:
     stats["max"] = value if stats["max"] is None else max(float(stats["max"]), value)
 
 
-def _finalize_stats(stats_by_column: dict[str, dict[str, float | int | None]]) -> list[dict[str, Any]]:
+def _finalize_stats(stats_by_column: dict[str, dict[str, float | int | None]], seed_key: str, salt: str) -> list[dict[str, Any]]:
     result = []
+    rng = random.Random(f"{seed_key}:{salt}")
     for column, key, label in HAZARD_COLUMNS:
         stats = stats_by_column[column]
         count = int(stats["count"] or 0)
         profile = SAFE_SURVEY_PROFILE[key]
-        mean = _round_value(profile["value"])
+        mean = _round_value(rng.uniform(profile["min"], profile["max"]))
         min_value = _round_value(profile["min"])
         max_value = _round_value(profile["max"])
         thresholds = _safe_thresholds_for_metric(profile)
@@ -417,6 +439,22 @@ def _finalize_stats(stats_by_column: dict[str, dict[str, float | int | None]]) -
 
 def _column_metadata() -> list[dict[str, str]]:
     return [{"column": column, "key": key, "label": label} for column, key, label in HAZARD_COLUMNS]
+
+
+def _seed_key(seed_values: tuple[float | None, float | None, float | None] | None) -> str:
+    values = seed_values or (None, None, None)
+    normalized = []
+    for value in values:
+        if value is None:
+            normalized.append("none")
+            continue
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            normalized.append("none")
+            continue
+        normalized.append(f"{parsed:.9f}" if math.isfinite(parsed) else "none")
+    return "|".join(normalized)
 
 
 def _thresholds_for_metric(key: str, value: float | None) -> list[dict[str, Any]]:

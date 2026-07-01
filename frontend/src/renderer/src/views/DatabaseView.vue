@@ -44,7 +44,7 @@ const props = defineProps<{
 
 const tabs: Array<{ key: DatabaseTabKey; label: string; description: string }> = [
   { key: "towers", label: "杆塔表", description: "线路、坐标、高度、杆塔属性、风险等级与图片" },
-  { key: "geology_records", label: "地质表", description: "采样窗口环境数据、采集时间与图片" },
+  { key: "geology_records", label: "历史地质灾害指标表", description: "预处理生成的历史地质灾害指标与图片" },
 ];
 
 const activeTab = ref<DatabaseTabKey>("towers");
@@ -157,6 +157,7 @@ function enterCreateMode(): void {
   listNotice.value = "";
   submitError.value = "";
   syncFormValues(true);
+  fillHazardMetricFormValues();
   viewMode.value = "create";
 }
 
@@ -351,6 +352,20 @@ function syncFormValues(reset: boolean): void {
   }
 }
 
+function fillHazardMetricFormValues(): void {
+  if (activeTab.value !== "geology_records" || !hazardMetrics.value?.available) {
+    return;
+  }
+
+  const nextValues = { ...formValues.value };
+  for (const row of hazardMetrics.value.overall ?? []) {
+    if (row.key && row.mean !== null && row.mean !== undefined && Number.isFinite(row.mean)) {
+      nextValues[row.key] = String(row.mean);
+    }
+  }
+  formValues.value = nextValues;
+}
+
 function buildRecordPayload(): Record<string, string> {
   const payload: Record<string, string> = {};
   for (const field of activeFormFields.value) {
@@ -531,7 +546,7 @@ watch(
         <div class="hazard-metrics-header">
           <div>
             <span>历史地质灾害指标</span>
-            <strong>D-V 列整体统计</strong>
+            <strong>本轮勘测生成指标</strong>
           </div>
           <small v-if="hazardMetrics?.generated_at">生成时间：{{ hazardMetrics.generated_at }}</small>
         </div>
@@ -570,21 +585,14 @@ watch(
             size="small"
             class="hazard-metrics-table"
           >
-            <ElTableColumn prop="column" label="列" width="72" align="center" />
             <ElTableColumn prop="label" label="指标" min-width="190" show-overflow-tooltip />
-            <ElTableColumn label="均值" min-width="120" align="right">
+            <ElTableColumn label="数值" min-width="120" align="right">
               <template #default="{ row }">
                 <ElTag v-if="row.threshold_status === 'warning'" type="danger" effect="dark">
                   {{ formatMetricValue(row.mean) }}
                 </ElTag>
                 <span v-else>{{ formatMetricValue(row.mean) }}</span>
               </template>
-            </ElTableColumn>
-            <ElTableColumn label="最小值" min-width="120" align="right">
-              <template #default="{ row }">{{ formatMetricValue(row.min) }}</template>
-            </ElTableColumn>
-            <ElTableColumn label="最大值" min-width="120" align="right">
-              <template #default="{ row }">{{ formatMetricValue(row.max) }}</template>
             </ElTableColumn>
             <ElTableColumn label="样本数" min-width="110" align="right">
               <template #default="{ row }">{{ row.count.toLocaleString("zh-CN") }}</template>
@@ -787,10 +795,16 @@ watch(
           <section class="element-record-main">
             <div class="element-form-section">
               <div>
-                <span>基础信息</span>
+                <span>{{ activeTab === "geology_records" ? "历史灾害指标" : "基础信息" }}</span>
                 <strong>{{ baseFormFields.length }} 项</strong>
               </div>
-              <p>按当前 {{ activeTable.label }} 字段录入，创建时间与修改时间由系统自动写入。</p>
+              <p>
+                {{
+                  activeTab === "geology_records"
+                    ? "默认填入当前预处理生成的历史地质灾害指标，也可以手动调整。"
+                    : "按当前表字段录入，创建时间与修改时间由系统自动写入。"
+                }}
+              </p>
             </div>
 
             <ElForm label-position="top" class="element-record-form" @submit.prevent>

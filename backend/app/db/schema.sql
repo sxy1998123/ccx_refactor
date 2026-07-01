@@ -17,16 +17,28 @@ CREATE TABLE IF NOT EXISTS towers (
 );
 
 CREATE TABLE IF NOT EXISTS geology_records (
-    humidity_percent REAL,
-    illumination_lux REAL,
-    pressure_kpa REAL,
-    rainfall_mm REAL,
-    temperature_c REAL,
-    wind_direction_deg REAL,
-    wind_speed_mps REAL,
+    disaster_type TEXT,
+    longitude TEXT,
+    latitude TEXT,
+    clay_content_percent REAL,
+    silt_content_percent REAL,
+    sand_content_percent REAL,
     soil_moisture_percent REAL,
-    soil_temperature_c REAL,
-    collected_at TEXT,
+    porosity_percent REAL,
+    permeability_mm_h REAL,
+    cohesion_kpa REAL,
+    soil_thickness_m REAL,
+    bedrock_depth_m REAL,
+    slope_degree REAL,
+    aspect_degree REAL,
+    relative_relief_m REAL,
+    terrain_relief_m_per_km2 REAL,
+    twi REAL,
+    tri REAL,
+    ndvi REAL,
+    vegetation_coverage_percent REAL,
+    lai_m2_m2 REAL,
+    canopy_coverage_percent REAL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     example1 TEXT,
@@ -53,4 +65,4 @@ CREATE TABLE IF NOT EXISTS schema_field_descriptions (
 CREATE INDEX IF NOT EXISTS idx_towers_line_id ON towers(line_id);
 CREATE INDEX IF NOT EXISTS idx_towers_risk_level ON towers(risk_level);
 CREATE INDEX IF NOT EXISTS idx_towers_collected_at ON towers(collected_at);
-CREATE INDEX IF NOT EXISTS idx_geology_records_collected_at ON geology_records(collected_at);
+CREATE INDEX IF NOT EXISTS idx_geology_records_created_at ON geology_records(created_at);
