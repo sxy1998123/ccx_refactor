@@ -180,6 +180,7 @@ export type RiskResult = {
     summary_csv: string;
     case_count: number;
     rainfall_data_dir: string;
+    rainfall_displacement_scale?: number;
     summary: {
       cases?: RainfallRiskCase[];
       over_limit_cases?: RainfallRiskCase[];
@@ -324,6 +325,16 @@ export type PreprocessResult = {
       z: number | null;
     };
     ccx_displacement_mm?: {
+      x: number | null;
+      y: number | null;
+      z: number | null;
+    };
+    display_displacement_m?: {
+      x: number | null;
+      y: number | null;
+      z: number | null;
+    };
+    display_displacement_mm?: {
       x: number | null;
       y: number | null;
       z: number | null;

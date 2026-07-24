@@ -11,6 +11,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_float(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return float(raw_value.strip())
+    except ValueError:
+        return default
+
+
 def _backend_root() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
@@ -139,6 +149,7 @@ class Settings:
     ccx_root: Path = field(default_factory=_ccx_root)
     ccx_results_dir: Path = field(default_factory=_ccx_results_dir)
     ccx_rainfall_data_dir: Path = field(default_factory=_ccx_rainfall_data_dir)
+    ccx_rainfall_displacement_scale: float = _env_float("CCX_RAINFALL_DISPLACEMENT_SCALE", 0.8) # 应力位移缩放系数
     hazard_excel_path: Path = field(default_factory=_hazard_excel_path)
 
 

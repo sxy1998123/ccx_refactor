@@ -108,26 +108,12 @@ const gnssMetrics = computed(() => {
   ];
 });
 
-const averageDisplacement = computed(() => {
-  const results = Object.values(preprocessResult.value?.tower_results ?? {});
-  return {
-    x: meanNullable(results.map((result) => result.imu.x_drift_m)),
-    y: meanNullable(results.map((result) => result.imu.y_drift_m)),
-    z: meanNullable(results.map((result) => result.imu.z_drift_m)),
-  };
-});
-
 const displacementMetrics = computed(() => {
-  const fallbackDisplacement = preprocessResult.value?.tower_summary?.ccx_displacement_m;
-  const displacement = {
-    x: averageDisplacement.value.x ?? fallbackDisplacement?.x,
-    y: averageDisplacement.value.y ?? fallbackDisplacement?.y,
-    z: averageDisplacement.value.z ?? fallbackDisplacement?.z,
-  };
+  const displacement = preprocessResult.value?.tower_summary?.display_displacement_mm;
   return [
-    ["平均 X 坐标位移", formatNullable(displacement.x, "m", 6)],
-    ["平均 Y 坐标位移", formatNullable(displacement.y, "m", 6)],
-    ["平均 Z 坐标位移", formatNullable(displacement.z, "m", 6)],
+    ["平均 X 坐标位移", formatNullable(displacement?.x, "mm", 3)],
+    ["平均 Y 坐标位移", formatNullable(displacement?.y, "mm", 3)],
+    ["平均 Z 坐标位移", formatNullable(displacement?.z, "mm", 3)],
   ];
 });
 
@@ -137,9 +123,9 @@ const towerRows = computed(() => {
     slot,
     fileName: result.file_name,
     targetDate: result.target_date,
-    x: formatNullable(result.imu.x_drift_m, "m", 6),
-    y: formatNullable(result.imu.y_drift_m, "m", 6),
-    z: formatNullable(result.imu.z_drift_m, "m", 6),
+    x: formatNullable(result.imu.x_drift_mm, "mm", 3),
+    y: formatNullable(result.imu.y_drift_mm, "mm", 3),
+    z: formatNullable(result.imu.z_drift_mm, "mm", 3),
   }));
 });
 
@@ -217,14 +203,6 @@ function formatNullable(value: number | null | undefined, unit: string, digits: 
     return "--";
   }
   return `${value.toFixed(digits)}${unit ? ` ${unit}` : ""}`;
-}
-
-function meanNullable(values: Array<number | null | undefined>): number | null {
-  const validValues = values.filter((value): value is number => value !== null && value !== undefined && !Number.isNaN(value));
-  if (!validValues.length) {
-    return null;
-  }
-  return validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
 }
 
 function getFileName(filePath: string): string {

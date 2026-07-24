@@ -145,6 +145,7 @@ def _run_task(task_id: str, preprocess_result: dict, task_dir: Path) -> None:
                 "summary_csv": risk.get("summary_csv", ""),
                 "case_count": risk.get("case_count", 0),
                 "rainfall_data_dir": risk.get("rainfall_data_dir", ""),
+                "rainfall_displacement_scale": risk.get("rainfall_displacement_scale", 1.0),
                 "summary": risk.get("summary", {}),
             },
             "progress": {"current": risk.get("case_count", 0), "total": risk.get("case_count", 0)},

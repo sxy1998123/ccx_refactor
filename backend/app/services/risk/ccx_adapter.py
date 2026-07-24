@@ -85,6 +85,7 @@ def run_full_risk(
         ),
         out_dir=out_dir,
         data_dir=data_dir,
+        rainfall_displacement_scale=settings.ccx_rainfall_displacement_scale,
         progress=on_progress,
     )
 
@@ -96,6 +97,7 @@ def run_full_risk(
         "summary_csv": str(summary_csv),
         "case_count": len(results),
         "rainfall_data_dir": str(data_dir),
+        "rainfall_displacement_scale": settings.ccx_rainfall_displacement_scale,
         "summary": _summarize_rainfall(summary_rows, inp_path),
     }
 
@@ -236,14 +238,14 @@ def stress_unit_to_pa_factor(unit: str) -> float:
 
 
 def _read_displacement(preprocess_result: dict[str, Any]) -> dict[str, float]:
-    displacement = preprocess_result.get("tower_summary", {}).get("ccx_displacement_m", {})
+    displacement = preprocess_result.get("tower_summary", {}).get("display_displacement_m", {})
     values = {
         "x": _float_or_none(displacement.get("x")),
         "y": _float_or_none(displacement.get("y")),
         "z": _float_or_none(displacement.get("z")),
     }
     if any(value is None for value in values.values()):
-        raise CcxAdapterError("Preprocess result does not contain complete ccx_displacement_m")
+        raise CcxAdapterError("Preprocess result does not contain complete display_displacement_m")
     return {key: float(value) for key, value in values.items() if value is not None}
 
 

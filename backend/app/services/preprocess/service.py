@@ -180,6 +180,19 @@ def _summarize_towers(tower_results: dict[str, dict]) -> dict:
                 values.append(float(source))
 
     max_drift = max(drift_rows, key=lambda item: item["total_drift_mm"], default=None)
+    ccx_displacement_m = {
+        "x": _mean_or_none(drift_values_m["x"]),
+        "y": _mean_or_none(drift_values_m["y"]),
+        "z": _mean_or_none(drift_values_m["z"]),
+    }
+    ccx_displacement_mm = {
+        "x": _mean_or_none(drift_values_mm["x"]),
+        "y": _mean_or_none(drift_values_mm["y"]),
+        "z": _mean_or_none(drift_values_mm["z"]),
+    }
+    display_displacement_m = _scale_displacement(ccx_displacement_m, 1 / 3)
+    display_displacement_mm = _scale_displacement(ccx_displacement_mm, 1 / 3)
+
     return {
         "tower_count": len(tower_results),
         "mean_lat": _mean_or_none(lat_values),
@@ -188,16 +201,10 @@ def _summarize_towers(tower_results: dict[str, dict]) -> dict:
         "max_total_drift_mm": max_drift["total_drift_mm"] if max_drift else None,
         "max_drift_source": max_drift["file_name"] if max_drift else "",
         "max_drift_slot": max_drift["slot"] if max_drift else "",
-        "ccx_displacement_m": {
-            "x": _mean_or_none(drift_values_m["x"]),
-            "y": _mean_or_none(drift_values_m["y"]),
-            "z": _mean_or_none(drift_values_m["z"]),
-        },
-        "ccx_displacement_mm": {
-            "x": _mean_or_none(drift_values_mm["x"]),
-            "y": _mean_or_none(drift_values_mm["y"]),
-            "z": _mean_or_none(drift_values_mm["z"]),
-        },
+        "ccx_displacement_m": ccx_displacement_m,
+        "ccx_displacement_mm": ccx_displacement_mm,
+        "display_displacement_m": display_displacement_m,
+        "display_displacement_mm": display_displacement_mm,
     }
 
 
@@ -228,6 +235,13 @@ def _hazard_metric_seed(tower_summary: dict) -> tuple[float | None, float | None
 
 def _mean_or_none(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
+
+
+def _scale_displacement(displacement: dict[str, float | None], scale: float) -> dict[str, float | None]:
+    return {
+        axis: value * scale if value is not None else None
+        for axis, value in displacement.items()
+    }
 
 
 def _float_or_none(value: object) -> float | None:
